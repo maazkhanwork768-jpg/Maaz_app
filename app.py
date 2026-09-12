@@ -14,7 +14,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 # -----------------------------------------------------------------------------
-# 1. PAGE CONFIG & INSTITUTIONAL DARK THEME DESIGN SYSTEM
+# 1. PAGE CONFIG & DARK THEME SYSTEM
 # -----------------------------------------------------------------------------
 st.set_page_config(
     page_title="Maaz Khan Trading | Institutional Terminal",
@@ -26,7 +26,6 @@ st.set_page_config(
 st.markdown(
     """
 <style>
-    /* Dark Theme System */
     .stApp { background-color: #0b0e11; color: #EAECEF; }
     
     section[data-testid="stSidebar"] {
@@ -34,7 +33,6 @@ st.markdown(
         border-right: 1px solid #2b313a;
     }
 
-    /* Terminal Header Banner */
     .terminal-header {
         background: linear-gradient(180deg, #181a20 0%, #0b0e11 100%);
         padding: 20px 24px;
@@ -58,7 +56,6 @@ st.markdown(
         margin-top: 4px;
     }
 
-    /* Styled Metric Cards */
     div[data-testid="stMetric"] {
         background-color: #181a20;
         border: 1px solid #2b313a;
@@ -68,7 +65,6 @@ st.markdown(
     div[data-testid="stMetricLabel"] { color: #848E9C !important; font-size: 13px; }
     div[data-testid="stMetricValue"] { color: #EAECEF !important; font-weight: 700; }
 
-    /* Signal Badges */
     .badge-long { background-color: #0ECB81; color: #000000; padding: 4px 12px; border-radius: 4px; font-weight: 800; }
     .badge-short { background-color: #F6465D; color: #FFFFFF; padding: 4px 12px; border-radius: 4px; font-weight: 800; }
 </style>
@@ -77,7 +73,7 @@ st.markdown(
 )
 
 # -----------------------------------------------------------------------------
-# 2. AUTO-HEALING DATABASE ENGINE (FIXES DATABASE OPERATIONAL ERROR)
+# 2. AUTO-HEALING DATABASE ENGINE
 # -----------------------------------------------------------------------------
 conn = sqlite3.connect("users.db", check_same_thread=False)
 c = conn.cursor()
@@ -92,7 +88,6 @@ c.execute("""
     )
 """)
 
-# Safe Schema Migration Check
 c.execute("PRAGMA table_info(users)")
 existing_columns = [col[1] for col in c.fetchall()]
 
@@ -178,7 +173,7 @@ def update_last_login(username):
 
 
 # -----------------------------------------------------------------------------
-# 3. OTP DISPATCH & CAPTCHA ENGINE
+# 3. OTP & CAPTCHA ENGINE
 # -----------------------------------------------------------------------------
 def send_otp_email(receiver_email, otp_code):
   try:
@@ -262,13 +257,12 @@ if "reset_target_user" not in st.session_state:
   st.session_state["reset_target_user"] = ""
 
 # -----------------------------------------------------------------------------
-# 4. HIGH-SPEED REST DATA ENGINE
+# 4. HIGH-SPEED REAL-TIME DATA ENGINE (UNCACHED FOR LIVE DATA)
 # -----------------------------------------------------------------------------
-@st.cache_data(ttl=2)
-def get_market_ticker_price(symbol="BTCUSDT"):
+def get_live_ticker_price(symbol="BTCUSDT"):
   headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
 
-  # Endpoint 1: Bybit REST API
+  # Provider 1: Bybit REST API
   try:
     url = f"https://api.bybit.com/v5/market/tickers?category=spot&symbol={symbol}"
     req = urllib.request.Request(url, headers=headers)
@@ -289,7 +283,7 @@ def get_market_ticker_price(symbol="BTCUSDT"):
   except Exception:
     pass
 
-  # Endpoint 2: US Exchange Fallback
+  # Provider 2: US REST Fallback
   try:
     url = f"https://api.binance.us/api/v3/ticker/24hr?symbol={symbol}"
     req = urllib.request.Request(url, headers=headers)
@@ -315,44 +309,6 @@ def get_market_ticker_price(symbol="BTCUSDT"):
       "volume": 0.0,
       "quote_volume": 0.0,
   }
-
-
-@st.cache_data(ttl=5)
-def get_market_klines(symbol="BTCUSDT", interval="1m", limit=120):
-  headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
-
-  try:
-    bybit_map = {
-        "1m": "1",
-        "5m": "5",
-        "15m": "15",
-        "1h": "60",
-        "4h": "240",
-        "1d": "D",
-    }
-    b_int = bybit_map.get(interval, "1")
-    url = f"https://api.bybit.com/v5/market/kline?category=spot&symbol={symbol}&interval={b_int}&limit={limit}"
-    req = urllib.request.Request(url, headers=headers)
-    with urllib.request.urlopen(req, timeout=3) as resp:
-      data = json.loads(resp.read().decode())
-      if data.get("retCode") == 0 and data.get("result", {}).get("list"):
-        kline_list = data["result"]["list"]
-        kline_list.reverse()
-        rows = []
-        for k in kline_list:
-          rows.append({
-              "open_time": pd.to_datetime(int(k[0]), unit="ms"),
-              "open": float(k[1]),
-              "high": float(k[2]),
-              "low": float(k[3]),
-              "close": float(k[4]),
-              "volume": float(k[5]),
-          })
-        return pd.DataFrame(rows)
-  except Exception:
-    pass
-
-  return pd.DataFrame()
 
 
 # -----------------------------------------------------------------------------
@@ -709,55 +665,60 @@ else:
           for r in c.fetchall()
       ])
 
-  ticker_data = get_market_ticker_price(selected_pair)
-  df_klines = get_market_klines(selected_pair, interval=timeframe, limit=120)
-
   # HEADER BANNER
   st.markdown(
       f"""
   <div class="terminal-header">
       <div>
           <div class="terminal-title">⚡ MAAZ KHAN TRADING TERMINAL | {selected_pair}</div>
-          <div class="terminal-subtitle">Real-Time Fast Execution Feed • Timeframe: {timeframe}</div>
+          <div class="terminal-subtitle">Real-Time Live Feed • Timeframe: {timeframe}</div>
       </div>
   </div>
   """,
       unsafe_allow_html=True,
   )
 
-  c1, c2, c3, c4, c5 = st.columns(5)
-  price_chg_color = "🟢" if ticker_data["change"] >= 0 else "🔴"
+  # ⚡ LIVE REFRESHING METRICS FRAGMENT (UPDATES EVERY 2 SECONDS)
+  @st.fragment(run_every="2s")
+  def render_live_metrics():
+    ticker_data = get_live_ticker_price(selected_pair)
+    cp = ticker_data["price"]
 
-  def fmt_p(val):
-    return f"${val:,.6f}" if val < 1 else f"${val:,.2f}"
+    def fmt_p(val):
+      return f"${val:,.6f}" if val < 1 else f"${val:,.2f}"
 
-  cp = ticker_data["price"]
-  c1.metric("Mark Price", fmt_p(cp))
-  c2.metric(
-      "24h Change",
-      f"{ticker_data['change']:.2f}%",
-      delta=f"{price_chg_color} 24h",
-  )
-  c3.metric("24h High", fmt_p(ticker_data["high"]))
-  c4.metric("24h Low", fmt_p(ticker_data["low"]))
-  c5.metric("24h Volume (USDT)", f"${ticker_data['quote_volume']:,.0f}")
+    c1, c2, c3, c4, c5 = st.columns(5)
+    price_chg_color = "🟢" if ticker_data["change"] >= 0 else "🔴"
 
-  st.markdown("---")
+    c1.metric("Mark Price", fmt_p(cp))
+    c2.metric(
+        "24h Change",
+        f"{ticker_data['change']:.2f}%",
+        delta=f"{price_chg_color} 24h",
+    )
+    c3.metric("24h High", fmt_p(ticker_data["high"]))
+    c4.metric("24h Low", fmt_p(ticker_data["low"]))
+    c5.metric("24h Volume (USDT)", f"${ticker_data['quote_volume']:,.0f}")
 
-  # ⚡ CLEAN NATIVE SCALP METRIC CARDS (NO RAW HTML ERRORS)
-  st.markdown("### ⚡ **INSTANT SCALP EXECUTION MATRIX**")
+    st.markdown("---")
 
-  tp1 = cp * 1.005  # Take Profit 1 (+0.5% Scalp)
-  tp2 = cp * 1.012  # Take Profit 2 (+1.2% Day Trade)
-  tp3 = cp * 1.025  # Take Profit 3 (+2.5% Runner)
-  sl = cp * 0.994  # Stop Loss (-0.6% Strict Risk)
+    # ⚡ LIVE SCALP MATRIX
+    st.markdown("### ⚡ **INSTANT SCALP EXECUTION MATRIX**")
 
-  s_col1, s_col2, s_col3, s_col4, s_col5 = st.columns(5)
-  s_col1.metric("⚡ Entry Price", fmt_p(cp))
-  s_col2.metric("🎯 TP 1 (+0.5%)", fmt_p(tp1), delta="+0.5%")
-  s_col3.metric("🎯 TP 2 (+1.2%)", fmt_p(tp2), delta="+1.2%")
-  s_col4.metric("🚀 TP 3 (+2.5%)", fmt_p(tp3), delta="+2.5%")
-  s_col5.metric("🛑 Stop Loss (-0.6%)", fmt_p(sl), delta="-0.6%")
+    tp1 = cp * 1.005
+    tp2 = cp * 1.012
+    tp3 = cp * 1.025
+    sl = cp * 0.994
+
+    s_col1, s_col2, s_col3, s_col4, s_col5 = st.columns(5)
+    s_col1.metric("⚡ Entry Price", fmt_p(cp))
+    s_col2.metric("🎯 TP 1 (+0.5%)", fmt_p(tp1), delta="+0.5%")
+    s_col3.metric("🎯 TP 2 (+1.2%)", fmt_p(tp2), delta="+1.2%")
+    s_col4.metric("🚀 TP 3 (+2.5%)", fmt_p(tp3), delta="+2.5%")
+    s_col5.metric("🛑 Stop Loss (-0.6%)", fmt_p(sl), delta="-0.6%")
+
+  # Render Live Metrics Fragment
+  render_live_metrics()
 
   st.markdown("---")
 
@@ -768,7 +729,7 @@ else:
       "🔮 Horizon Matrix",
   ])
 
-  # TAB 1: OFFICIAL TRADINGVIEW WEBSOCKET ADVANCED CHART (STREAMS TICKS LIVE)
+  # TAB 1: OFFICIAL TRADINGVIEW WEBSOCKET ADVANCED CHART
   with tab_chart:
     st.subheader(
         f"📈 Live WebSocket Charting Engine ({timeframe} Timeframe): {selected_pair}"
@@ -807,12 +768,20 @@ else:
         """
     components.html(tradingview_html, height=640)
 
-  # TAB 2: INSTANT MATHEMATICAL SIGNAL ENGINE
+  # TAB 2: INSTANT SIGNAL ENGINE
   with tab_signals:
     st.subheader(f"⚡ MAAZ KHAN SIGNAL ENGINE — {selected_pair}")
+    ticker_now = get_live_ticker_price(selected_pair)
+    curr_p = ticker_now["price"]
+    is_bull = ticker_now["change"] >= 0
 
-    curr_p = cp
-    is_bull = ticker_data["change"] >= 0
+    def fmt_p(val):
+      return f"${val:,.6f}" if val < 1 else f"${val:,.2f}"
+
+    tp1 = curr_p * 1.005
+    tp2 = curr_p * 1.012
+    tp3 = curr_p * 1.025
+    sl = curr_p * 0.994
 
     s1, s2, s3 = st.columns(3)
     with s1:
@@ -873,4 +842,3 @@ else:
             "Bias": ["BULLISH 🟢", "BULLISH 🟢", "BEARISH 🔴", "BULLISH 🟢"],
         })
     )
-
