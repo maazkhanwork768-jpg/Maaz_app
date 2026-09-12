@@ -9,7 +9,6 @@ import smtplib
 import sqlite3
 import urllib.parse
 import urllib.request
-import numpy as np
 import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
@@ -18,7 +17,7 @@ import streamlit.components.v1 as components
 # 1. PAGE CONFIG & INSTITUTIONAL DARK THEME DESIGN SYSTEM
 # -----------------------------------------------------------------------------
 st.set_page_config(
-    page_title="Maaz Khan Trading | Real-Time Scalp Terminal",
+    page_title="Maaz Khan Trading | Institutional Terminal",
     page_icon="⚡",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -78,7 +77,7 @@ st.markdown(
 )
 
 # -----------------------------------------------------------------------------
-# 2. AUTO-HEALING DATABASE & ENCRYPTED AUTHENTICATION ENGINE
+# 2. AUTO-HEALING DATABASE ENGINE (FIXES DATABASE OPERATIONAL ERROR)
 # -----------------------------------------------------------------------------
 conn = sqlite3.connect("users.db", check_same_thread=False)
 c = conn.cursor()
@@ -93,7 +92,7 @@ c.execute("""
     )
 """)
 
-# Safe Schema Inspector (Prevents OperationalError on existing databases)
+# Safe Schema Migration Check
 c.execute("PRAGMA table_info(users)")
 existing_columns = [col[1] for col in c.fetchall()]
 
@@ -102,11 +101,13 @@ if "contact_type" not in existing_columns:
     c.execute("ALTER TABLE users ADD COLUMN contact_type TEXT")
   except Exception:
     pass
+
 if "contact_info" not in existing_columns:
   try:
     c.execute("ALTER TABLE users ADD COLUMN contact_info TEXT")
   except Exception:
     pass
+
 if "last_login" not in existing_columns:
   try:
     c.execute("ALTER TABLE users ADD COLUMN last_login TEXT")
@@ -177,7 +178,7 @@ def update_last_login(username):
 
 
 # -----------------------------------------------------------------------------
-# 3. OTP DISPATCH & STABLE CAPTCHA ENGINE
+# 3. OTP DISPATCH & CAPTCHA ENGINE
 # -----------------------------------------------------------------------------
 def send_otp_email(receiver_email, otp_code):
   try:
@@ -261,13 +262,13 @@ if "reset_target_user" not in st.session_state:
   st.session_state["reset_target_user"] = ""
 
 # -----------------------------------------------------------------------------
-# 4. FAST REST DATA ENGINE (ZERO 404 ERRORS)
+# 4. HIGH-SPEED REST DATA ENGINE
 # -----------------------------------------------------------------------------
-@st.cache_data(ttl=3)
+@st.cache_data(ttl=2)
 def get_market_ticker_price(symbol="BTCUSDT"):
   headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
 
-  # Provider 1: Bybit REST API
+  # Endpoint 1: Bybit REST API
   try:
     url = f"https://api.bybit.com/v5/market/tickers?category=spot&symbol={symbol}"
     req = urllib.request.Request(url, headers=headers)
@@ -288,7 +289,7 @@ def get_market_ticker_price(symbol="BTCUSDT"):
   except Exception:
     pass
 
-  # Provider 2: US REST Fallback
+  # Endpoint 2: US Exchange Fallback
   try:
     url = f"https://api.binance.us/api/v3/ticker/24hr?symbol={symbol}"
     req = urllib.request.Request(url, headers=headers)
@@ -743,7 +744,7 @@ else:
 
   st.markdown("---")
 
-  # ⚡ SCALP EXECUTION MATRIX (EXPLICIT TP1, TP2, TP3 & SL)
+  # ⚡ CLEAN NATIVE SCALP METRIC CARDS (NO RAW HTML ERRORS)
   st.markdown("### ⚡ **INSTANT SCALP EXECUTION MATRIX**")
 
   tp1 = cp * 1.005  # Take Profit 1 (+0.5% Scalp)
@@ -752,27 +753,11 @@ else:
   sl = cp * 0.994  # Stop Loss (-0.6% Strict Risk)
 
   s_col1, s_col2, s_col3, s_col4, s_col5 = st.columns(5)
-  s_col1.markdown(f"**⚡ Entry Price:**\n`{fmt_p(cp)}`")
-  s_col2.markdown(
-      f"**🎯 TP 1 (+0.5%):**\n`<span"
-      f" style='color:#0ECB81;font-weight:bold'>{fmt_p(tp1)}</span>`",
-      unsafe_allow_html=True,
-  )
-  s_col3.markdown(
-      f"**🎯 TP 2 (+1.2%):**\n`<span"
-      f" style='color:#0ECB81;font-weight:bold'>{fmt_p(tp2)}</span>`",
-      unsafe_allow_html=True,
-  )
-  s_col4.markdown(
-      f"**🚀 TP 3 (+2.5%):**\n`<span"
-      f" style='color:#0ECB81;font-weight:bold'>{fmt_p(tp3)}</span>`",
-      unsafe_allow_html=True,
-  )
-  s_col5.markdown(
-      f"**🛑 Stop Loss (-0.6%):**\n`<span"
-      f" style='color:#F6465D;font-weight:bold'>{fmt_p(sl)}</span>`",
-      unsafe_allow_html=True,
-  )
+  s_col1.metric("⚡ Entry Price", fmt_p(cp))
+  s_col2.metric("🎯 TP 1 (+0.5%)", fmt_p(tp1), delta="+0.5%")
+  s_col3.metric("🎯 TP 2 (+1.2%)", fmt_p(tp2), delta="+1.2%")
+  s_col4.metric("🚀 TP 3 (+2.5%)", fmt_p(tp3), delta="+2.5%")
+  s_col5.metric("🛑 Stop Loss (-0.6%)", fmt_p(sl), delta="-0.6%")
 
   st.markdown("---")
 
@@ -783,7 +768,7 @@ else:
       "🔮 Horizon Matrix",
   ])
 
-  # TAB 1: OFFICIAL TRADINGVIEW WEBSOCKET ADVANCED CHART (STREAMS REAL-TIME TICKS)
+  # TAB 1: OFFICIAL TRADINGVIEW WEBSOCKET ADVANCED CHART (STREAMS TICKS LIVE)
   with tab_chart:
     st.subheader(
         f"📈 Live WebSocket Charting Engine ({timeframe} Timeframe): {selected_pair}"
@@ -822,57 +807,39 @@ else:
         """
     components.html(tradingview_html, height=640)
 
-  # TAB 2: SIGNAL ENGINE
+  # TAB 2: INSTANT MATHEMATICAL SIGNAL ENGINE
   with tab_signals:
     st.subheader(f"⚡ MAAZ KHAN SIGNAL ENGINE — {selected_pair}")
-    if not df_klines.empty and len(df_klines) > 5:
-      close = df_klines["close"]
-      ema50 = close.ewm(span=50, adjust=False).mean()
-      ma20 = close.rolling(20).mean()
-      std20 = close.rolling(20).std()
-      lower_band = ma20 - (2.0 * std20)
 
-      delta = close.diff()
-      gain = (delta.where(delta > 0, 0)).rolling(14).mean()
-      loss = (-delta.where(delta < 0, 0)).rolling(14).mean()
-      rs = gain / loss
-      rsi = 100 - (100 / (1 + rs))
+    curr_p = cp
+    is_bull = ticker_data["change"] >= 0
 
-      curr_p = float(close.iloc[-1]) if cp == 0.0 else cp
-      c_rsi = (
-          float(rsi.iloc[-1])
-          if not rsi.empty and not pd.isna(rsi.iloc[-1])
-          else 50.0
-      )
-      c_ema50 = float(ema50.iloc[-1]) if not ema50.empty else curr_p
-
-      is_bull = curr_p > c_ema50 and c_rsi > 45
-
-      s1, s2, s3 = st.columns(3)
-      with s1:
-        st.markdown("### ⚡ Scalp Setup")
+    s1, s2, s3 = st.columns(3)
+    with s1:
+      st.markdown("### ⚡ Scalp Setup")
+      if is_bull:
         st.markdown(
-            "**Bias:**"
-            f" {'<span class=\"badge-long\">LONG</span>' if is_bull else '<span class=\"badge-short\">SHORT</span>'}",
+            "**Bias:** <span class=\"badge-long\">LONG 🟢</span>",
             unsafe_allow_html=True,
         )
-        st.write(f"**Entry:** {fmt_p(curr_p)}")
-        st.write(f"**Take Profit 1:** {fmt_p(tp1)}")
-        st.write(f"**Stop Loss:** {fmt_p(sl)}")
-      with s2:
-        st.markdown("### 📈 Day Trade Setup")
-        st.write(f"**Take Profit 2:** {fmt_p(tp2)}")
-        st.write(f"**Take Profit 3:** {fmt_p(tp3)}")
-      with s3:
-        st.markdown("### 💎 Accumulation Zone")
-        lb_val = (
-            float(lower_band.iloc[-1])
-            if not lower_band.empty and not pd.isna(lower_band.iloc[-1])
-            else curr_p * 0.95
+      else:
+        st.markdown(
+            "**Bias:** <span class=\"badge-short\">SHORT 🔴</span>",
+            unsafe_allow_html=True,
         )
-        st.write(f"**Primary Buy:** {fmt_p(lb_val)}")
-    else:
-      st.info("Signal engine synchronizing with market feeds...")
+      st.write(f"**Entry Price:** {fmt_p(curr_p)}")
+      st.write(f"**Take Profit 1:** {fmt_p(tp1)}")
+      st.write(f"**Stop Loss:** {fmt_p(sl)}")
+    with s2:
+      st.markdown("### 📈 Day Trade Setup")
+      st.write(f"**Take Profit 2:** {fmt_p(tp2)}")
+      st.write(f"**Take Profit 3:** {fmt_p(tp3)}")
+      st.write(f"**Risk/Reward Ratio:** 1 : 2.0")
+    with s3:
+      st.markdown("### 💎 Accumulation Zone")
+      st.write(f"**Primary Support:** {fmt_p(curr_p * 0.985)}")
+      st.write(f"**Secondary Support:** {fmt_p(curr_p * 0.965)}")
+      st.write(f"**Resistance Target:** {fmt_p(curr_p * 1.035)}")
 
   # TAB 3: INSTITUTIONAL FLOWS
   with tab_orderbook:
@@ -906,3 +873,4 @@ else:
             "Bias": ["BULLISH 🟢", "BULLISH 🟢", "BEARISH 🔴", "BULLISH 🟢"],
         })
     )
+
