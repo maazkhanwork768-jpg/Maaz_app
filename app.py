@@ -55,7 +55,6 @@ st.markdown(
         margin-top: 4px;
     }
 
-    /* Mobile Text Cutoff Fix for Metrics */
     div[data-testid="stMetric"] {
         background-color: #12141c;
         border: 1px solid #1f2633;
@@ -107,23 +106,34 @@ c.execute("""
 """)
 conn.commit()
 
+
 def hash_password(password):
   return hashlib.sha256(password.encode()).hexdigest()
+
 
 def username_exists(username):
   c.execute("SELECT username FROM users WHERE username = ?", (username,))
   return c.fetchone() is not None
 
+
 def add_user(username, password, contact_type, contact_info):
   try:
     c.execute(
-        "INSERT INTO users (username, password, contact_type, contact_info, last_login) VALUES (?, ?, ?, ?, ?)",
-        (username, hash_password(password), contact_type, contact_info, "Never"),
+        "INSERT INTO users (username, password, contact_type, contact_info,"
+        " last_login) VALUES (?, ?, ?, ?, ?)",
+        (
+            username,
+            hash_password(password),
+            contact_type,
+            contact_info,
+            "Never",
+        ),
     )
     conn.commit()
     return True
   except sqlite3.IntegrityError:
     return False
+
 
 def verify_user(username, password):
   c.execute(
@@ -132,9 +142,12 @@ def verify_user(username, password):
   )
   return c.fetchone() is not None
 
+
 def update_last_login(username):
   now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-  c.execute("UPDATE users SET last_login = ? WHERE username = ?", (now, username))
+  c.execute(
+      "UPDATE users SET last_login = ? WHERE username = ?", (now, username)
+  )
   conn.commit()
 
 
@@ -146,7 +159,9 @@ def fetch_all_exchange_symbols():
   headers = {"User-Agent": "Mozilla/5.0"}
   symbols_set = set()
   try:
-    url_linear = "https://api.bybit.com/v5/market/instruments-info?category=linear"
+    url_linear = (
+        "https://api.bybit.com/v5/market/instruments-info?category=linear"
+    )
     req = urllib.request.Request(url_linear, headers=headers)
     with urllib.request.urlopen(req, timeout=6) as resp:
       data = json.loads(resp.read().decode())
@@ -168,22 +183,61 @@ def fetch_all_exchange_symbols():
   if symbols_set:
     return sorted(list(symbols_set))
   return sorted([
-      "BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "XRPUSDT", "ADAUSDT", "AVAXUSDT", 
-      "DOGEUSDT", "LINKUSDT", "NEARUSDT", "SUIUSDT", "PEPEUSDT", "RENDERUSDT", 
-      "FETUSDT", "INJUSDT", "ARBUSDT", "OPUSDT", "TIAUSDT", "SEIUSDT", "APTUSDT", 
-      "SHIBUSDT", "MATICUSDT", "DOTUSDT", "LTCUSDT", "UNIUSDT", "ATOMUSDT", 
-      "ETCUSDT", "FILUSDT", "XMRUSDT", "BCHUSDT", "TONUSDT", "WIFUSDT", "BONKUSDT", 
-      "FLOKIUSDT", "NOTUSDT", "BOMEUSDT", "MEWUSDT", "WLDUSDT", "ONDOUSDT", 
-      "JUPUSDT", "PYTHUSDT", "ENSUSDT", "PENDLEUSDT", "STXUSDT", "IMXUSDT"
+      "BTCUSDT",
+      "ETHUSDT",
+      "SOLUSDT",
+      "BNBUSDT",
+      "XRPUSDT",
+      "ADAUSDT",
+      "AVAXUSDT",
+      "DOGEUSDT",
+      "LINKUSDT",
+      "NEARUSDT",
+      "SUIUSDT",
+      "PEPEUSDT",
+      "RENDERUSDT",
+      "FETUSDT",
+      "INJUSDT",
+      "ARBUSDT",
+      "OPUSDT",
+      "TIAUSDT",
+      "SEIUSDT",
+      "APTUSDT",
+      "SHIBUSDT",
+      "MATICUSDT",
+      "DOTUSDT",
+      "LTCUSDT",
+      "UNIUSDT",
+      "ATOMUSDT",
+      "ETCUSDT",
+      "FILUSDT",
+      "XMRUSDT",
+      "BCHUSDT",
+      "TONUSDT",
+      "WIFUSDT",
+      "BONKUSDT",
+      "FLOKIUSDT",
+      "NOTUSDT",
+      "BOMEUSDT",
+      "MEWUSDT",
+      "WLDUSDT",
+      "ONDOUSDT",
+      "JUPUSDT",
+      "PYTHUSDT",
+      "ENSUSDT",
+      "PENDLEUSDT",
+      "STXUSDT",
+      "IMXUSDT",
   ])
+
 
 all_market_coins = fetch_all_exchange_symbols()
 
 
 # -----------------------------------------------------------------------------
-# 4. HIGH-SPEED MARKET TICKER & KLINE ENGINE
+# 4. MARKET TICKER & KLINE DATA ENGINE
 # -----------------------------------------------------------------------------
-@st.cache_data(ttl=5)
+@st.cache_data(ttl=10)
 def get_quantum_market_data(symbol="BTCUSDT"):
   headers = {"User-Agent": "Mozilla/5.0"}
   for cat in ["linear", "spot"]:
@@ -201,23 +255,45 @@ def get_quantum_market_data(symbol="BTCUSDT"):
               "high": float(item.get("highPrice24h", p * 1.04)),
               "low": float(item.get("lowPrice24h", p * 0.96)),
               "volume": float(item.get("turnover24h", p * 15000)),
-              "open_interest": float(item.get("openInterest", p * 250000) if "openInterest" in item else p * 50000),
-              "funding_rate": float(item.get("fundingRate", 0.0055) if "fundingRate" in item else 0.0) * 100,
+              "open_interest": float(
+                  item.get("openInterest", p * 250000)
+                  if "openInterest" in item
+                  else p * 50000
+              ),
+              "funding_rate": float(
+                  item.get("fundingRate", 0.0055)
+                  if "fundingRate" in item
+                  else 0.0
+              )
+              * 100,
           }
     except Exception:
       continue
   base_p = 78500.0 if "BTC" in symbol else (2650.0 if "ETH" in symbol else 145.0)
   return {
-      "price": base_p, "change": 2.14, "high": base_p * 1.05, "low": base_p * 0.95,
-      "volume": base_p * 35000, "open_interest": base_p * 180000, "funding_rate": 0.0055,
+      "price": base_p,
+      "change": 2.14,
+      "high": base_p * 1.05,
+      "low": base_p * 0.95,
+      "volume": base_p * 35000,
+      "open_interest": base_p * 180000,
+      "funding_rate": 0.0055,
   }
 
-@st.cache_data(ttl=20)
+
+@st.cache_data(ttl=30)
 def get_advanced_klines(symbol="BTCUSDT", interval="15m", limit=150):
   headers = {"User-Agent": "Mozilla/5.0"}
   for cat in ["linear", "spot"]:
     try:
-      bybit_map = {"1m": "1", "5m": "5", "15m": "15", "1h": "60", "4h": "240", "1d": "D"}
+      bybit_map = {
+          "1m": "1",
+          "5m": "5",
+          "15m": "15",
+          "1h": "60",
+          "4h": "240",
+          "1d": "D",
+      }
       b_int = bybit_map.get(interval, "15")
       url = f"https://api.bybit.com/v5/market/kline?category={cat}&symbol={symbol}&interval={b_int}&limit={limit}"
       req = urllib.request.Request(url, headers=headers)
@@ -230,8 +306,11 @@ def get_advanced_klines(symbol="BTCUSDT", interval="15m", limit=150):
           for k in kline_list:
             rows.append({
                 "open_time": pd.to_datetime(int(k[0]), unit="ms"),
-                "open": float(k[1]), "high": float(k[2]), "low": float(k[3]),
-                "close": float(k[4]), "volume": float(k[5]),
+                "open": float(k[1]),
+                "high": float(k[2]),
+                "low": float(k[3]),
+                "close": float(k[4]),
+                "volume": float(k[5]),
             })
           return pd.DataFrame(rows)
     except Exception:
@@ -271,11 +350,15 @@ if not st.session_state["logged_in"]:
             st.session_state["username"] = u or "maaz"
             st.rerun()
           else:
-            st.error("Invalid credentials. Use default operator 'maaz' or register.")
+            st.error(
+                "Invalid credentials. Use default operator 'maaz' or register."
+            )
     with tab_reg:
       r_u = st.text_input("New Username")
       r_p = st.text_input("New Password", type="password")
-      c_type = st.radio("Channel", ["Email Address", "Phone Number"], horizontal=True)
+      c_type = st.radio(
+          "Channel", ["Email Address", "Phone Number"], horizontal=True
+      )
       c_val = st.text_input("Contact Info")
       if st.button("Initialize Account"):
         if username_exists(r_u.strip()):
@@ -293,7 +376,9 @@ else:
   selected_pair = st.sidebar.selectbox(
       "Select Asset (All Spot & Futures):",
       all_market_coins,
-      index=all_market_coins.index("BTCUSDT") if "BTCUSDT" in all_market_coins else 0,
+      index=all_market_coins.index("BTCUSDT")
+      if "BTCUSDT" in all_market_coins
+      else 0,
   )
   timeframe = st.sidebar.selectbox(
       "Quantum Timeframe:", ["1m", "5m", "15m", "1h", "4h", "1d"], index=2
@@ -317,20 +402,29 @@ else:
           <div class="terminal-title">⚡ MAAZ KHAN | {selected_pair}</div>
           <div class="terminal-subtitle">Multi-Strategy Live Derivatives Intelligence • Frame: {timeframe}</div>
       </div>
-      <div><span class="badge-long">🟢 QUANTUM STREAM ACTIVE</span></div>
+      <div><span class="badge-long">🟢 1S WEBSOCKET TICKER ACTIVE</span></div>
   </div>
   """,
       unsafe_allow_html=True,
   )
 
-  # Top Ticker Header
-  m1, m2, m3, m4, m5 = st.columns(5)
-  chg_col = "🟢" if market["change"] >= 0 else "🔴"
-  m1.metric("Mark Price", fmt(cp))
-  m2.metric("24h Change", f"{market['change']:.2f}%", delta=f"{chg_col} 24h")
-  m3.metric("Open Interest", f"${market['open_interest']:,.0f}")
-  m4.metric("Funding Rate", f"+{market['funding_rate']:.4f}%")
-  m5.metric("24h Volume", f"${market['volume']:,.0f}")
+  # ⚡ TRADINGVIEW 1-SECOND LIVE TICKER HEADER (STREAMED VIA WEBSOCKETS)
+  tv_symbol = f"BYBIT:{selected_pair}"
+  tv_header_html = f"""
+  <div class="tradingview-widget-container" style="margin-bottom: 12px;">
+    <div class="tradingview-widget-container__widget"></div>
+    <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-symbol-info.js" async>
+    {{
+      "symbol": "{tv_symbol}",
+      "width": "100%",
+      "locale": "en",
+      "colorTheme": "dark",
+      "isTransparent": true
+    }}
+    </script>
+  </div>
+  """
+  components.html(tv_header_html, height=185)
 
   st.markdown("---")
 
@@ -352,16 +446,28 @@ else:
 
   if "Scalp" in strat_tab:
     tp1, tp2, tp3, sl = cp * 1.004, cp * 1.009, cp * 1.018, cp * 0.995
-    strat_desc = "Designed for 1m-5m charts. Quick liquidity sweeps with tight 0.5% - 1.8% targets."
+    strat_desc = (
+        "Designed for 1m-5m charts. Quick liquidity sweeps with tight 0.5% -"
+        " 1.8% targets."
+    )
   elif "Day" in strat_tab:
     tp1, tp2, tp3, sl = cp * 1.015, cp * 1.032, cp * 1.055, cp * 0.982
-    strat_desc = "Designed for 15m-1h charts. Captures major intraday impulse waves with 1.5% - 5.5% targets."
+    strat_desc = (
+        "Designed for 15m-1h charts. Captures major intraday impulse waves with"
+        " 1.5% - 5.5% targets."
+    )
   elif "Swing" in strat_tab:
     tp1, tp2, tp3, sl = cp * 1.045, cp * 1.085, cp * 1.140, cp * 0.960
-    strat_desc = "Designed for 4h-1d charts. Multi-day structural shifts targeting 4.5% - 14% expansion."
+    strat_desc = (
+        "Designed for 4h-1d charts. Multi-day structural shifts targeting 4.5%"
+        " - 14% expansion."
+    )
   else:
     tp1, tp2, tp3, sl = cp * 0.980, cp * 0.950, cp * 1.250, cp * 0.900
-    strat_desc = "Spot Dollar Cost Averaging (DCA) accumulation zones for long-term portfolio growth."
+    strat_desc = (
+        "Spot Dollar Cost Averaging (DCA) accumulation zones for long-term"
+        " portfolio growth."
+    )
 
   c_s1, c_s2, c_s3, c_s4, c_s5 = st.columns(5)
   c_s1.metric("⚡ Optimal Entry", fmt(cp))
@@ -386,14 +492,27 @@ else:
 
   with tab_chart:
     st.subheader(f"📈 Advanced WebSocket Chart ({timeframe}) — {selected_pair}")
-    
+
     # ⚙️ USER DYNAMIC CHART SIZE SLIDER
     st.markdown("**⚙️ Adjust Chart Size for your Screen:**")
-    user_chart_height = st.slider("Chart Height (Pixels)", min_value=400, max_value=1500, value=750, step=50, key="chart_slider")
-    
-    tv_map = {"1m": "1", "5m": "5", "15m": "15", "1h": "60", "4h": "240", "1d": "D"}
-    tv_symbol = f"BYBIT:{selected_pair}"
-    
+    user_chart_height = st.slider(
+        "Chart Height (Pixels)",
+        min_value=400,
+        max_value=1500,
+        value=750,
+        step=50,
+        key="chart_slider",
+    )
+
+    tv_map = {
+        "1m": "1",
+        "5m": "5",
+        "15m": "15",
+        "1h": "60",
+        "4h": "240",
+        "1d": "D",
+    }
+
     tv_html = f"""
         <div class="tradingview-widget-container" style="height:{user_chart_height}px; width:100%;">
           <div class="tradingview-widget-container__widget" style="height:calc(100% - 32px); width:100%;"></div>
@@ -426,7 +545,6 @@ else:
       std20 = close.rolling(20).std()
       upper, lower = ma20 + (2.0 * std20), ma20 - (2.0 * std20)
 
-      # ATR (Average True Range)
       high_low = high_series - low_series
       high_close = np.abs(high_series - close.shift())
       low_close = np.abs(low_series - close.shift())
@@ -439,15 +557,34 @@ else:
       loss = (-delta.where(delta < 0, 0)).rolling(14).mean()
       rsi = 100 - (100 / (1 + (gain / loss)))
 
-      curr_rsi = float(rsi.iloc[-1]) if not pd.isna(rsi.iloc[-1]) else 55.4
-      upper_val = float(upper.iloc[-1]) if not pd.isna(upper.iloc[-1]) else cp * 1.025
-      lower_val = float(lower.iloc[-1]) if not pd.isna(lower.iloc[-1]) else cp * 0.975
-      ema50_val = float(ema50.iloc[-1]) if not pd.isna(ema50.iloc[-1]) else cp * 0.99
-      curr_atr = float(atr.iloc[-1]) if not pd.isna(atr.iloc[-1]) else cp * 0.015
-      
-      # Fibonacci Retracement Levels based on recent swing
-      recent_high = df['high'].tail(30).max()
-      recent_low = df['low'].tail(30).min()
+      curr_rsi = (
+          float(rsi.iloc[-1])
+          if not rsi.empty and not pd.isna(rsi.iloc[-1])
+          else 55.4
+      )
+      upper_val = (
+          float(upper.iloc[-1])
+          if not upper.empty and not pd.isna(upper.iloc[-1])
+          else cp * 1.025
+      )
+      lower_val = (
+          float(lower.iloc[-1])
+          if not lower.empty and not pd.isna(lower.iloc[-1])
+          else cp * 0.975
+      )
+      ema50_val = (
+          float(ema50.iloc[-1])
+          if not ema50.empty and not pd.isna(ema50.iloc[-1])
+          else cp * 0.99
+      )
+      curr_atr = (
+          float(atr.iloc[-1])
+          if not atr.empty and not pd.isna(atr.iloc[-1])
+          else cp * 0.015
+      )
+
+      recent_high = df["high"].tail(30).max()
+      recent_low = df["low"].tail(30).min()
     else:
       seed = sum(ord(ch) for ch in selected_pair) % 15
       curr_rsi = max(18.0, min(82.0, 50.0 + (market["change"] * 1.8) + seed - 7))
@@ -461,8 +598,16 @@ else:
     fib_382 = recent_high - (fib_diff * 0.382)
     fib_618 = recent_high - (fib_diff * 0.618)
 
-    rsi_status = "Overbought 🔥" if curr_rsi > 70 else ("Oversold 💎" if curr_rsi < 30 else "Neutral Momentum ⚖️")
-    trend_status = "Bullish (Above EMA 50) 🟢" if cp >= ema50_val else "Bearish (Below EMA 50) 🔴"
+    rsi_status = (
+        "Overbought 🔥"
+        if curr_rsi > 70
+        else ("Oversold 💎" if curr_rsi < 30 else "Neutral Momentum ⚖️")
+    )
+    trend_status = (
+        "Bullish (Above EMA 50) 🟢"
+        if cp >= ema50_val
+        else "Bearish (Below EMA 50) 🔴"
+    )
 
     mi1, mi2, mi3, mi4 = st.columns(4)
     mi1.metric("RSI Momentum (14)", f"{curr_rsi:.2f}", delta=rsi_status)
@@ -477,7 +622,10 @@ else:
     f3.metric("Swing Low (1.000)", fmt(recent_low))
 
     st.markdown("#### 📊 Trend Filter Analysis")
-    st.write(f"**EMA 50 Structural Support/Resistance:** `{fmt(ema50_val)}` — {trend_status}")
+    st.write(
+        f"**EMA 50 Structural Support/Resistance:** `{fmt(ema50_val)}` —"
+        f" {trend_status}"
+    )
 
   with tab_orderbook:
     st.subheader("📊 Whale Order Book & Liquidity Walls")
@@ -486,16 +634,28 @@ else:
       st.markdown("**🟢 MAJOR BID WALLS (SUPPORT)**")
       st.table(
           pd.DataFrame({
-              "Cluster Price": [fmt(cp * 0.992), fmt(cp * 0.985), fmt(cp * 0.972)],
+              "Cluster Price": [
+                  fmt(cp * 0.992),
+                  fmt(cp * 0.985),
+                  fmt(cp * 0.972),
+              ],
               "Depth Size": ["18.5M USDT", "42.1M USDT", "89.4M USDT"],
-              "Type": ["Limit Buy", "Institutional Accumulation", "Strong Support"],
+              "Type": [
+                  "Limit Buy",
+                  "Institutional Accumulation",
+                  "Strong Support",
+              ],
           })
       )
     with ob2:
       st.markdown("**🔴 MAJOR ASK WALLS (RESISTANCE)**")
       st.table(
           pd.DataFrame({
-              "Cluster Price": [fmt(cp * 1.008), fmt(cp * 1.018), fmt(cp * 1.035)],
+              "Cluster Price": [
+                  fmt(cp * 1.008),
+                  fmt(cp * 1.018),
+                  fmt(cp * 1.035),
+              ],
               "Depth Size": ["14.2M USDT", "38.9M USDT", "74.1M USDT"],
               "Type": ["Take Profit Wall", "Heavy Resistance", "Liquidity Pool"],
           })
@@ -503,11 +663,14 @@ else:
 
   with tab_liquidation:
     st.subheader("🔥 Liquidations & CVD (Cumulative Volume Delta) Heatmap")
-    st.markdown("Estimated 24H leverage wipeouts based on current volatility expansion.")
-    
+    st.markdown(
+        "Estimated 24H leverage wipeouts based on current volatility"
+        " expansion."
+    )
+
     liq_long = market["volume"] * 0.0012 * (random.uniform(0.8, 1.2))
     liq_short = market["volume"] * 0.0015 * (random.uniform(0.8, 1.2))
-    
+
     l1, l2 = st.columns(2)
     with l1:
       st.markdown(
@@ -548,4 +711,3 @@ else:
         """,
         unsafe_allow_html=True,
     )
-
