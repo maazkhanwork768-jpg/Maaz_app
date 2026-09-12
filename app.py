@@ -27,6 +27,11 @@ st.set_page_config(
 st.markdown(
     """
 <style>
+    /* Prevent mobile pull-to-refresh bounce causing logout */
+    html, body, [data-testid="stAppViewContainer"] {
+        overscroll-behavior-y: none !important;
+    }
+
     .stApp { background-color: #07090c; color: #EAECEF; font-family: 'Inter', sans-serif; }
     
     section[data-testid="stSidebar"] {
