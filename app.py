@@ -4,7 +4,11 @@ import json
 import random
 import re
 import sqlite3
+import smtplib
+from email.mime.text import MIMEText
 import urllib.request
+import urllib.parse
+import base64
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
@@ -71,10 +75,11 @@ st.markdown(
 )
 
 # -----------------------------------------------------------------------------
-# 2. UPDATED DATABASE SCHEMA & AUTHENTICATION ENGINE
+# 2. AUTO-MIGRATING DATABASE & AUTHENTICATION ENGINE
 # -----------------------------------------------------------------------------
 conn = sqlite3.connect("users.db", check_same_thread=False)
 c = conn.cursor()
+
 c.execute("""
     CREATE TABLE IF NOT EXISTS users (
         username TEXT PRIMARY KEY,
@@ -84,6 +89,17 @@ c.execute("""
         last_login TEXT
     )
 """)
+
+try:
+  c.execute("ALTER TABLE users ADD COLUMN contact_type TEXT")
+except sqlite3.OperationalError:
+  pass
+
+try:
+  c.execute("ALTER TABLE users ADD COLUMN contact_info TEXT")
+except sqlite3.OperationalError:
+  pass
+
 conn.commit()
 
 
@@ -131,7 +147,69 @@ def update_last_login(username):
   conn.commit()
 
 
-# CAPTCHA State Initialization
+# -----------------------------------------------------------------------------
+# 3. REAL EMAIL & SMS OTP DISPATCH HELPERS
+# -----------------------------------------------------------------------------
+def send_otp_email(receiver_email, otp_code):
+  """Sends actual email using Gmail SMTP if credentials exist in st.secrets."""
+  try:
+    sender_email = st.secrets.get("SMTP_EMAIL", "")
+    sender_password = st.secrets.get("SMTP_PASSWORD", "")
+
+    if sender_email and sender_password:
+      msg = MIMEText(
+          f"Your Maaz Khan Trading Terminal verification OTP is: {otp_code}\n\nDo"
+          " not share this code with anyone."
+      )
+      msg["Subject"] = "Maaz Khan Trading - OTP Verification Code"
+      msg["From"] = sender_email
+      msg["To"] = receiver_email
+
+      with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+        server.login(sender_email, sender_password)
+        server.sendmail(sender_email, receiver_email, msg.as_string())
+      return True, "Email sent successfully to your inbox!"
+    else:
+      return False, "SMTP credentials missing from Streamlit Secrets."
+  except Exception as e:
+    return False, f"Email delivery error: {str(e)}"
+
+
+def send_otp_sms(receiver_phone, otp_code):
+  """Sends actual SMS using Twilio REST API if credentials exist in st.secrets."""
+  try:
+    account_sid = st.secrets.get("TWILIO_ACCOUNT_SID", "")
+    auth_token = st.secrets.get("TWILIO_AUTH_TOKEN", "")
+    from_number = st.secrets.get("TWILIO_PHONE_NUMBER", "")
+
+    if account_sid and auth_token and from_number:
+      url = f"https://api.twilio.com/2010-04-01/Accounts/{account_sid}/Messages.json"
+      auth = base64.b64encode(f"{account_sid}:{auth_token}".encode()).decode()
+      data = urllib.parse.urlencode({
+          "From": from_number,
+          "To": receiver_phone,
+          "Body": (
+              f"Your Maaz Khan Trading Terminal OTP is: {otp_code}. Valid for"
+              " registration."
+          ),
+      }).encode()
+      req = urllib.request.Request(
+          url,
+          data=data,
+          headers={
+              "Authorization": f"Basic {auth}",
+              "Content-Type": "application/x-www-form-urlencoded",
+          },
+      )
+      with urllib.request.urlopen(req, timeout=6) as resp:
+        return True, "SMS message sent successfully to your phone!"
+    else:
+      return False, "Twilio SMS credentials missing from Streamlit Secrets."
+  except Exception as e:
+    return False, f"SMS delivery error: {str(e)}"
+
+
+# CAPTCHA Initialization
 if "cap_a" not in st.session_state:
   st.session_state["cap_a"] = random.randint(1, 9)
   st.session_state["cap_b"] = random.randint(1, 9)
@@ -142,16 +220,16 @@ def reset_captcha():
   st.session_state["cap_b"] = random.randint(1, 9)
 
 
-# OTP & Registration Session State Handling
+# OTP Session State
 if "reg_step" not in st.session_state:
-  st.session_state["reg_step"] = "details"  # Modes: 'details' or 'verify_otp'
+  st.session_state["reg_step"] = "details"
 if "generated_otp" not in st.session_state:
   st.session_state["generated_otp"] = ""
 if "pending_user" not in st.session_state:
   st.session_state["pending_user"] = {}
 
 # -----------------------------------------------------------------------------
-# 3. DIRECT BINANCE API ENGINE
+# 4. BINANCE DATA ENGINE
 # -----------------------------------------------------------------------------
 @st.cache_data(ttl=15)
 def get_binance_ticker_price(symbol="BTCUSDT"):
@@ -212,7 +290,7 @@ def get_binance_klines(symbol="BTCUSDT", interval="1d", limit=120):
 
 
 # -----------------------------------------------------------------------------
-# 4. AUTHENTICATION GATEKEEPER WITH OTP VERIFICATION
+# 5. AUTHENTICATION GATEKEEPER WITH REAL DISPATCH & FALLBACK
 # -----------------------------------------------------------------------------
 if "logged_in" not in st.session_state:
   st.session_state["logged_in"] = False
@@ -235,7 +313,6 @@ if not st.session_state["logged_in"]:
   with col2:
     tab_login, tab_reg = st.tabs(["🔒 Account Login", "📝 Trader Registration"])
 
-    # LOGIN FORM
     with tab_login:
       with st.form("login_form"):
         st.subheader("Login to Terminal")
@@ -270,7 +347,6 @@ if not st.session_state["logged_in"]:
             st.error("Invalid username or password.")
             reset_captcha()
 
-    # ADVANCED REGISTRATION FORM WITH OTP & UNIQUE USERNAME CHECK
     with tab_reg:
       if st.session_state["reg_step"] == "details":
         st.subheader("Create Account")
@@ -327,6 +403,7 @@ if not st.session_state["logged_in"]:
                 f"Username '{r_user}' is already taken. Please choose another."
             )
           else:
+            valid_format = True
             if contact_method == "Phone Number" and not re.match(
                 r"^\+\d{10,14}$", contact_val
             ):
@@ -334,12 +411,14 @@ if not st.session_state["logged_in"]:
                   "Invalid phone number format. Please check country code and"
                   " digits."
               )
+              valid_format = False
             elif contact_method == "Email Address" and not re.match(
                 r"[^@]+@[^@]+\.[^@]+", contact_val
             ):
               st.error("Invalid email address format.")
-            else:
-              # Generate 6-Digit OTP
+              valid_format = False
+
+            if valid_format:
               otp_code = str(random.randint(100000, 999999))
               st.session_state["generated_otp"] = otp_code
               st.session_state["pending_user"] = {
@@ -348,19 +427,34 @@ if not st.session_state["logged_in"]:
                   "contact_type": contact_method,
                   "contact_info": contact_val,
               }
+
+              # Dispatch OTP via real Email or SMS
+              if contact_method == "Email Address":
+                sent, msg = send_otp_email(contact_val, otp_code)
+              else:
+                sent, msg = send_otp_sms(contact_val, otp_code)
+
+              st.session_state["dispatch_status"] = (sent, msg)
               st.session_state["reg_step"] = "verify_otp"
               st.rerun()
 
       elif st.session_state["reg_step"] == "verify_otp":
         st.subheader("🔑 Enter One-Time Password (OTP)")
         pending = st.session_state["pending_user"]
+        sent_status, status_msg = st.session_state.get(
+            "dispatch_status", (False, "")
+        )
+
         st.info(f"Verification code sent to {pending['contact_info']}")
 
-        # Simulated OTP Alert Box for Direct Testing
-        st.warning(
-            f"📩 [TESTING SIMULATOR] Your OTP code is:"
-            f" **{st.session_state['generated_otp']}**"
-        )
+        if sent_status:
+          st.success(f"✅ Live Dispatch: {status_msg}")
+        else:
+          st.warning(
+              f"⚠️ {status_msg}\n\n"
+              f"📩 [FALLBACK DISPATCH DISPLAY] Your OTP code is:"
+              f" **{st.session_state['generated_otp']}**"
+          )
 
         user_otp = st.text_input(
             "Enter 6-Digit OTP Code", max_chars=6, key="user_otp"
@@ -396,7 +490,7 @@ if not st.session_state["logged_in"]:
 
 else:
   # -----------------------------------------------------------------------------
-  # 5. UNLOCKED BINANCE PRO TRADING DASHBOARD
+  # 6. UNLOCKED BINANCE PRO DASHBOARD
   # -----------------------------------------------------------------------------
   st.sidebar.markdown("### 🟡 **BINANCE TERMINAL**")
   st.sidebar.write(f"Logged in as: **{st.session_state['username']}**")
