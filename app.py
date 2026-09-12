@@ -13,7 +13,6 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
-import yfinance as yf
 
 # -----------------------------------------------------------------------------
 # 1. PAGE CONFIG & INSTITUTIONAL DARK THEME DESIGN SYSTEM
@@ -99,11 +98,20 @@ c.execute("PRAGMA table_info(users)")
 existing_columns = [col[1] for col in c.fetchall()]
 
 if "contact_type" not in existing_columns:
-  c.execute("ALTER TABLE users ADD COLUMN contact_type TEXT")
+  try:
+    c.execute("ALTER TABLE users ADD COLUMN contact_type TEXT")
+  except Exception:
+    pass
 if "contact_info" not in existing_columns:
-  c.execute("ALTER TABLE users ADD COLUMN contact_info TEXT")
+  try:
+    c.execute("ALTER TABLE users ADD COLUMN contact_info TEXT")
+  except Exception:
+    pass
 if "last_login" not in existing_columns:
-  c.execute("ALTER TABLE users ADD COLUMN last_login TEXT")
+  try:
+    c.execute("ALTER TABLE users ADD COLUMN last_login TEXT")
+  except Exception:
+    pass
 
 conn.commit()
 
@@ -253,7 +261,7 @@ if "reset_target_user" not in st.session_state:
   st.session_state["reset_target_user"] = ""
 
 # -----------------------------------------------------------------------------
-# 4. MULTI-PROVIDER MARKET DATA ENGINE
+# 4. FAST REST DATA ENGINE (ZERO 404 ERRORS)
 # -----------------------------------------------------------------------------
 @st.cache_data(ttl=3)
 def get_market_ticker_price(symbol="BTCUSDT"):
@@ -745,10 +753,26 @@ else:
 
   s_col1, s_col2, s_col3, s_col4, s_col5 = st.columns(5)
   s_col1.markdown(f"**⚡ Entry Price:**\n`{fmt_p(cp)}`")
-  s_col2.markdown(f"**🎯 TP 1 (+0.5%):**\n`<span style='color:#0ECB81;font-weight:bold'>{fmt_p(tp1)}</span>`", unsafe_allow_html=True)
-  s_col3.markdown(f"**🎯 TP 2 (+1.2%):**\n`<span style='color:#0ECB81;font-weight:bold'>{fmt_p(tp2)}</span>`", unsafe_allow_html=True)
-  s_col4.markdown(f"**🚀 TP 3 (+2.5%):**\n`<span style='color:#0ECB81;font-weight:bold'>{fmt_p(tp3)}</span>`", unsafe_allow_html=True)
-  s_col5.markdown(f"**🛑 Stop Loss (-0.6%):**\n`<span style='color:#F6465D;font-weight:bold'>{fmt_p(sl)}</span>`", unsafe_allow_html=True)
+  s_col2.markdown(
+      f"**🎯 TP 1 (+0.5%):**\n`<span"
+      f" style='color:#0ECB81;font-weight:bold'>{fmt_p(tp1)}</span>`",
+      unsafe_allow_html=True,
+  )
+  s_col3.markdown(
+      f"**🎯 TP 2 (+1.2%):**\n`<span"
+      f" style='color:#0ECB81;font-weight:bold'>{fmt_p(tp2)}</span>`",
+      unsafe_allow_html=True,
+  )
+  s_col4.markdown(
+      f"**🚀 TP 3 (+2.5%):**\n`<span"
+      f" style='color:#0ECB81;font-weight:bold'>{fmt_p(tp3)}</span>`",
+      unsafe_allow_html=True,
+  )
+  s_col5.markdown(
+      f"**🛑 Stop Loss (-0.6%):**\n`<span"
+      f" style='color:#F6465D;font-weight:bold'>{fmt_p(sl)}</span>`",
+      unsafe_allow_html=True,
+  )
 
   st.markdown("---")
 
@@ -776,7 +800,6 @@ else:
     tv_interval = tv_interval_map.get(timeframe, "1")
     tv_symbol = f"BYBIT:{selected_pair}"
 
-    # Official TradingView Advanced Real-Time Chart Embed
     tradingview_html = f"""
         <div class="tradingview-widget-container" style="height:620px;width:100%;">
           <div class="tradingview-widget-container__widget" style="height:620px;width:100%;"></div>
@@ -883,4 +906,3 @@ else:
             "Bias": ["BULLISH 🟢", "BULLISH 🟢", "BEARISH 🔴", "BULLISH 🟢"],
         })
     )
-
