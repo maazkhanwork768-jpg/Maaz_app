@@ -1,26 +1,28 @@
+import base64
 from datetime import datetime
+from email.mime.text import MIMEText
 import hashlib
 import json
 import random
 import re
-import sqlite3
 import smtplib
-from email.mime.text import MIMEText
-import urllib.request
+import sqlite3
 import urllib.parse
-import base64
+import urllib.request
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import streamlit as st
+import streamlit.components.v1 as components
+import yfinance as yf
 
 # -----------------------------------------------------------------------------
-# 1. PAGE CONFIG & BINANCE PRO STYLING
+# 1. PAGE CONFIG & INSTITUTIONAL DARK THEME DESIGN SYSTEM
 # -----------------------------------------------------------------------------
 st.set_page_config(
     page_title="Maaz Khan Trading | Institutional Terminal",
-    page_icon="🟡",
+    page_icon="⚡",
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -28,6 +30,7 @@ st.set_page_config(
 st.markdown(
     """
 <style>
+    /* Dark Theme System */
     .stApp { background-color: #0b0e11; color: #EAECEF; }
     
     section[data-testid="stSidebar"] {
@@ -35,7 +38,8 @@ st.markdown(
         border-right: 1px solid #2b313a;
     }
 
-    .binance-header {
+    /* Terminal Header Banner */
+    .terminal-header {
         background: linear-gradient(180deg, #181a20 0%, #0b0e11 100%);
         padding: 20px 24px;
         border-radius: 10px;
@@ -45,19 +49,20 @@ st.markdown(
         justify-content: space-between;
         align-items: center;
     }
-    .binance-title {
+    .terminal-title {
         font-size: 28px !important;
         font-weight: 800 !important;
         color: #F0B90B !important;
         letter-spacing: 1px;
         margin: 0;
     }
-    .binance-subtitle {
+    .terminal-subtitle {
         font-size: 13px;
         color: #848E9C;
         margin-top: 4px;
     }
 
+    /* Styled Metric Cards */
     div[data-testid="stMetric"] {
         background-color: #181a20;
         border: 1px solid #2b313a;
@@ -67,6 +72,7 @@ st.markdown(
     div[data-testid="stMetricLabel"] { color: #848E9C !important; font-size: 13px; }
     div[data-testid="stMetricValue"] { color: #EAECEF !important; font-weight: 700; }
 
+    /* Signal Badges */
     .badge-long { background-color: #0ECB81; color: #000000; padding: 4px 12px; border-radius: 4px; font-weight: 800; }
     .badge-short { background-color: #F6465D; color: #FFFFFF; padding: 4px 12px; border-radius: 4px; font-weight: 800; }
 </style>
@@ -75,7 +81,7 @@ st.markdown(
 )
 
 # -----------------------------------------------------------------------------
-# 2. AUTO-MIGRATING DATABASE & AUTHENTICATION ENGINE
+# 2. AUTO-MIGRATING DATABASE & ENCRYPTED AUTHENTICATION ENGINE
 # -----------------------------------------------------------------------------
 conn = sqlite3.connect("users.db", check_same_thread=False)
 c = conn.cursor()
@@ -164,7 +170,7 @@ def update_last_login(username):
 
 
 # -----------------------------------------------------------------------------
-# 3. OTP DISPATCH & CAPTCHA ENGINE
+# 3. OTP DISPATCH & STABLE CAPTCHA ENGINE
 # -----------------------------------------------------------------------------
 def send_otp_email(receiver_email, otp_code):
   try:
@@ -176,7 +182,7 @@ def send_otp_email(receiver_email, otp_code):
           f"Your Maaz Khan Trading Terminal verification OTP is: {otp_code}\n\nDo"
           " not share this code with anyone."
       )
-      msg["Subject"] = "Maaz Khan Trading - Security OTP Code"
+      msg["Subject"] = "Maaz Khan Trading - Security Verification Code"
       msg["From"] = sender_email
       msg["To"] = receiver_email
 
@@ -185,7 +191,7 @@ def send_otp_email(receiver_email, otp_code):
         server.sendmail(sender_email, receiver_email, msg.as_string())
       return True, "Email sent successfully to your inbox!"
     else:
-      return False, "SMTP credentials missing from Secrets."
+      return False, "SMTP credentials missing from Streamlit Secrets."
   except Exception as e:
     return False, f"Email delivery error: {str(e)}"
 
@@ -204,7 +210,7 @@ def send_otp_sms(receiver_phone, otp_code):
           "To": receiver_phone,
           "Body": (
               f"Your Maaz Khan Trading Terminal OTP is: {otp_code}. Valid for"
-              " account recovery."
+              " verification."
           ),
       }).encode()
       req = urllib.request.Request(
@@ -218,7 +224,7 @@ def send_otp_sms(receiver_phone, otp_code):
       with urllib.request.urlopen(req, timeout=6) as resp:
         return True, "SMS sent successfully to your mobile number!"
     else:
-      return False, "Twilio SMS credentials missing from Secrets."
+      return False, "Twilio SMS credentials missing from Streamlit Secrets."
   except Exception as e:
     return False, f"SMS delivery error: {str(e)}"
 
@@ -248,31 +254,13 @@ if "reset_target_user" not in st.session_state:
   st.session_state["reset_target_user"] = ""
 
 # -----------------------------------------------------------------------------
-# 4. MULTI-PROVIDER MARKET DATA ENGINE (BYPASSES CLOUD IP BLOCKS)
+# 4. MULTI-PROVIDER MARKET DATA ENGINE (FAST FAILOVER)
 # -----------------------------------------------------------------------------
 @st.cache_data(ttl=10)
-def get_binance_ticker_price(symbol="BTCUSDT"):
+def get_market_ticker_price(symbol="BTCUSDT"):
   headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
 
-  # Provider 1: Binance.US
-  try:
-    url = f"https://api.binance.us/api/v3/ticker/24hr?symbol={symbol}"
-    req = urllib.request.Request(url, headers=headers)
-    with urllib.request.urlopen(req, timeout=3) as resp:
-      data = json.loads(resp.read().decode())
-      if "lastPrice" in data:
-        return {
-            "price": float(data["lastPrice"]),
-            "change": float(data["priceChangePercent"]),
-            "high": float(data["highPrice"]),
-            "low": float(data["lowPrice"]),
-            "volume": float(data["volume"]),
-            "quote_volume": float(data["quoteVolume"]),
-        }
-  except Exception:
-    pass
-
-  # Provider 2: Bybit Global
+  # Endpoint 1: Bybit Global API
   try:
     url = f"https://api.bybit.com/v5/market/tickers?category=spot&symbol={symbol}"
     req = urllib.request.Request(url, headers=headers)
@@ -293,9 +281,9 @@ def get_binance_ticker_price(symbol="BTCUSDT"):
   except Exception:
     pass
 
-  # Provider 3: Binance Global
+  # Endpoint 2: US Exchange REST API
   try:
-    url = f"https://api.binance.com/api/v3/ticker/24hr?symbol={symbol}"
+    url = f"https://api.binance.us/api/v3/ticker/24hr?symbol={symbol}"
     req = urllib.request.Request(url, headers=headers)
     with urllib.request.urlopen(req, timeout=3) as resp:
       data = json.loads(resp.read().decode())
@@ -311,6 +299,29 @@ def get_binance_ticker_price(symbol="BTCUSDT"):
   except Exception:
     pass
 
+  # Endpoint 3: Yahoo Finance Fallback
+  try:
+    yf_symbol = symbol.replace("USDT", "-USD")
+    df = yf.download(yf_symbol, period="2d", interval="1d", progress=False)
+    if not df.empty and len(df) >= 1:
+      if isinstance(df.columns, pd.MultiIndex):
+        df.columns = df.columns.get_level_values(0)
+      curr_p = float(df["Close"].iloc[-1])
+      prev_p = float(df["Close"].iloc[-2]) if len(df) > 1 else curr_p
+      chg = (
+          ((curr_p - prev_p) / prev_p) * 100 if prev_p > 0 else 0.0
+      )
+      return {
+          "price": curr_p,
+          "change": chg,
+          "high": float(df["High"].iloc[-1]),
+          "low": float(df["Low"].iloc[-1]),
+          "volume": float(df["Volume"].iloc[-1]),
+          "quote_volume": float(df["Volume"].iloc[-1] * curr_p),
+      }
+  except Exception:
+    pass
+
   return {
       "price": 0.0,
       "change": 0.0,
@@ -322,41 +333,10 @@ def get_binance_ticker_price(symbol="BTCUSDT"):
 
 
 @st.cache_data(ttl=15)
-def get_binance_klines(symbol="BTCUSDT", interval="1d", limit=120):
+def get_market_klines(symbol="BTCUSDT", interval="1d", limit=120):
   headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
 
-  # Provider 1: Binance.US
-  try:
-    url = f"https://api.binance.us/api/v3/klines?symbol={symbol}&interval={interval}&limit={limit}"
-    req = urllib.request.Request(url, headers=headers)
-    with urllib.request.urlopen(req, timeout=3) as resp:
-      data = json.loads(resp.read().decode())
-      if isinstance(data, list) and len(data) > 0:
-        df = pd.DataFrame(
-            data,
-            columns=[
-                "open_time",
-                "open",
-                "high",
-                "low",
-                "close",
-                "volume",
-                "close_time",
-                "qav",
-                "trades",
-                "tbb",
-                "tbq",
-                "ignore",
-            ],
-        )
-        df["open_time"] = pd.to_datetime(df["open_time"], unit="ms")
-        for col in ["open", "high", "low", "close", "volume"]:
-          df[col] = df[col].astype(float)
-        return df
-  except Exception:
-    pass
-
-  # Provider 2: Bybit Global
+  # Endpoint 1: Bybit Kline Feed
   try:
     bybit_map = {
         "1m": "1",
@@ -388,9 +368,9 @@ def get_binance_klines(symbol="BTCUSDT", interval="1d", limit=120):
   except Exception:
     pass
 
-  # Provider 3: Binance Global
+  # Endpoint 2: US Exchange Kline Feed
   try:
-    url = f"https://api.binance.com/api/v3/klines?symbol={symbol}&interval={interval}&limit={limit}"
+    url = f"https://api.binance.us/api/v3/klines?symbol={symbol}&interval={interval}&limit={limit}"
     req = urllib.request.Request(url, headers=headers)
     with urllib.request.urlopen(req, timeout=3) as resp:
       data = json.loads(resp.read().decode())
@@ -423,7 +403,7 @@ def get_binance_klines(symbol="BTCUSDT", interval="1d", limit=120):
 
 
 # -----------------------------------------------------------------------------
-# 5. AUTHENTICATION GATEKEEPER
+# 5. SECURE AUTHENTICATION GATEKEEPER
 # -----------------------------------------------------------------------------
 if "logged_in" not in st.session_state:
   st.session_state["logged_in"] = False
@@ -432,10 +412,10 @@ if "logged_in" not in st.session_state:
 if not st.session_state["logged_in"]:
   st.markdown(
       """
-  <div class="binance-header">
+  <div class="terminal-header">
       <div>
-          <div class="binance-title">🟡 MAAZ KHAN TRADING</div>
-          <div class="binance-subtitle">Institutional Binance Pro Live Analytics & Algorithmic Execution</div>
+          <div class="terminal-title">⚡ MAAZ KHAN TRADING</div>
+          <div class="terminal-subtitle">Institutional Live Market Analytics & Algorithmic Execution Terminal</div>
       </div>
   </div>
   """,
@@ -450,6 +430,7 @@ if not st.session_state["logged_in"]:
         "🔑 Reset Password",
     ])
 
+    # 1. LOGIN FORM
     with tab_login:
       with st.form("login_form"):
         st.subheader("Login to Terminal")
@@ -485,6 +466,7 @@ if not st.session_state["logged_in"]:
           else:
             st.error("Invalid username or password.")
 
+    # 2. REGISTRATION FORM
     with tab_reg:
       if st.session_state["reg_step"] == "details":
         st.subheader("Create Account")
@@ -626,6 +608,7 @@ if not st.session_state["logged_in"]:
             st.session_state["reg_step"] = "details"
             st.rerun()
 
+    # 3. FORGOT PASSWORD FORM
     with tab_forgot:
       if st.session_state["reset_step"] == "request":
         st.subheader("Reset Forgotten Password")
@@ -728,9 +711,9 @@ if not st.session_state["logged_in"]:
 
 else:
   # -----------------------------------------------------------------------------
-  # 6. UNLOCKED BINANCE PRO DASHBOARD
+  # 6. UNLOCKED INSTITUTIONAL TRADING TERMINAL
   # -----------------------------------------------------------------------------
-  st.sidebar.markdown("### 🟡 **BINANCE TERMINAL**")
+  st.sidebar.markdown("### ⚡ **MK TERMINAL**")
   st.sidebar.write(f"Logged in as: **{st.session_state['username']}**")
   if st.sidebar.button("Logout"):
     st.session_state["logged_in"] = False
@@ -753,7 +736,7 @@ else:
       ])
 
   selected_pair = st.sidebar.selectbox(
-      "Select Binance Market:",
+      "Select Market Pair:",
       [
           "BTCUSDT",
           "ETHUSDT",
@@ -772,18 +755,18 @@ else:
   )
 
   timeframe = st.sidebar.selectbox(
-      "Chart Timeframe:", ["1m", "5m", "15m", "1h", "4h", "1d"], index=4
+      "Chart Timeframe:", ["1m", "5m", "15m", "1h", "4h", "1d"], index=5
   )
 
-  ticker_data = get_binance_ticker_price(selected_pair)
-  df_klines = get_binance_klines(selected_pair, interval=timeframe, limit=120)
+  ticker_data = get_market_ticker_price(selected_pair)
+  df_klines = get_market_klines(selected_pair, interval=timeframe, limit=120)
 
   st.markdown(
       f"""
-  <div class="binance-header">
+  <div class="terminal-header">
       <div>
-          <div class="binance-title">🟡 {selected_pair} | BINANCE PRO</div>
-          <div class="binance-subtitle">Real-Time Direct Exchange Feed • Timeframe: {timeframe}</div>
+          <div class="terminal-title">⚡ {selected_pair} | INSTITUTIONAL TERMINAL</div>
+          <div class="terminal-subtitle">Real-Time Global Market Feed • Timeframe: {timeframe}</div>
       </div>
   </div>
   """,
@@ -808,118 +791,66 @@ else:
 
   st.markdown("---")
 
-  if not df_klines.empty and len(df_klines) > 5:
-    close = df_klines["close"]
-    high = df_klines["high"]
-    low = df_klines["low"]
+  tab_chart, tab_signals, tab_orderbook, tab_forecast = st.tabs([
+      "📈 Interactive Live Chart",
+      "⚡ Automated Trading Signals",
+      "📊 Volume & ETF Intelligence",
+      "🔮 Horizon Matrix",
+  ])
 
-    ma20 = close.rolling(20).mean()
-    ema50 = close.ewm(span=50, adjust=False).mean()
-    ema200 = close.ewm(span=200, adjust=False).mean()
+  # TAB 1: EMBEDDED TRADINGVIEW CHART (ZERO SERVER LOAD)
+  with tab_chart:
+    st.subheader(f"📈 Real-Time Charting Engine: {selected_pair}")
+    tv_symbol = f"BYBIT:{selected_pair}"
 
-    std20 = close.rolling(20).std()
-    upper_band = ma20 + (2.0 * std20)
-    lower_band = ma20 - (2.0 * std20)
+    tradingview_html = f"""
+        <div class="tradingview-widget-container" style="height:650px;width:100%;">
+          <div id="tradingview_chart" style="height:calc(100% - 32px);width:100%;"></div>
+          <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
+          <script type="text/javascript">
+          new TradingView.widget({{
+            "autosize": true,
+            "symbol": "{tv_symbol}",
+            "interval": "D",
+            "timezone": "Etc/UTC",
+            "theme": "dark",
+            "style": "1",
+            "locale": "en",
+            "toolbar_bg": "#0b0e11",
+            "enable_publishing": false,
+            "hide_side_toolbar": false,
+            "allow_symbol_change": true,
+            "container_id": "tradingview_chart"
+          }});
+          </script>
+        </div>
+        """
+    components.html(tradingview_html, height=660)
 
-    delta = close.diff()
-    gain = (delta.where(delta > 0, 0)).rolling(14).mean()
-    loss = (-delta.where(delta < 0, 0)).rolling(14).mean()
-    rs = gain / loss
-    rsi = 100 - (100 / (1 + rs))
+  # TAB 2: SIGNAL ENGINE
+  with tab_signals:
+    st.subheader(f"⚡ MAAZ KHAN SIGNAL ENGINE — {selected_pair}")
+    if not df_klines.empty and len(df_klines) > 5:
+      close = df_klines["close"]
+      ema50 = close.ewm(span=50, adjust=False).mean()
+      ma20 = close.rolling(20).mean()
+      std20 = close.rolling(20).std()
+      lower_band = ma20 - (2.0 * std20)
 
-    cp = float(close.iloc[-1])
-    c_rsi = float(rsi.iloc[-1]) if not rsi.empty and not pd.isna(rsi.iloc[-1]) else 50.0
-    c_ema50 = float(ema50.iloc[-1]) if not ema50.empty else cp
+      delta = close.diff()
+      gain = (delta.where(delta > 0, 0)).rolling(14).mean()
+      loss = (-delta.where(delta < 0, 0)).rolling(14).mean()
+      rs = gain / loss
+      rsi = 100 - (100 / (1 + rs))
 
-    tab_chart, tab_signals, tab_orderbook, tab_forecast = st.tabs([
-        "📈 Binance Live Candlestick Chart",
-        "⚡ Automated Trading Signals",
-        "📊 Volume & ETF Intelligence",
-        "🔮 Horizon Matrix",
-    ])
-
-    with tab_chart:
-      fig = make_subplots(
-          rows=2,
-          cols=1,
-          shared_xaxes=True,
-          vertical_spacing=0.03,
-          row_heights=[0.8, 0.2],
+      cp = float(close.iloc[-1])
+      c_rsi = (
+          float(rsi.iloc[-1])
+          if not rsi.empty and not pd.isna(rsi.iloc[-1])
+          else 50.0
       )
+      c_ema50 = float(ema50.iloc[-1]) if not ema50.empty else cp
 
-      fig.add_trace(
-          go.Candlestick(
-              x=df_klines["open_time"],
-              open=df_klines["open"],
-              high=df_klines["high"],
-              low=df_klines["low"],
-              close=df_klines["close"],
-              increasing_line_color="#0ECB81",
-              decreasing_line_color="#F6465D",
-              name="OHLC",
-          ),
-          row=1,
-          col=1,
-      )
-
-      fig.add_trace(
-          go.Scatter(
-              x=df_klines["open_time"],
-              y=ma20,
-              line=dict(color="#F0B90B", width=1.5),
-              name="20 MA",
-          ),
-          row=1,
-          col=1,
-      )
-      fig.add_trace(
-          go.Scatter(
-              x=df_klines["open_time"],
-              y=ema50,
-              line=dict(color="#00E5FF", width=1.5),
-              name="50 EMA",
-          ),
-          row=1,
-          col=1,
-      )
-      fig.add_trace(
-          go.Scatter(
-              x=df_klines["open_time"],
-              y=ema200,
-              line=dict(color="#E91E63", width=1.5),
-              name="200 EMA",
-          ),
-          row=1,
-          col=1,
-      )
-
-      colors = [
-          "#0ECB81" if c >= o else "#F6465D"
-          for c, o in zip(df_klines["close"], df_klines["open"])
-      ]
-      fig.add_trace(
-          go.Bar(
-              x=df_klines["open_time"],
-              y=df_klines["volume"],
-              marker_color=colors,
-              name="Volume",
-          ),
-          row=2,
-          col=1,
-      )
-
-      fig.update_layout(
-          template="plotly_dark",
-          height=680,
-          xaxis_rangeslider_visible=False,
-          paper_bgcolor="#0b0e11",
-          plot_bgcolor="#0b0e11",
-          margin=dict(l=10, r=10, t=20, b=10),
-      )
-      st.plotly_chart(fig, use_container_width=True)
-
-    with tab_signals:
-      st.subheader(f"⚡ MAAZ KHAN SIGNAL ENGINE — {selected_pair}")
       is_bull = cp > c_ema50 and c_rsi > 45
 
       s1, s2, s3 = st.columns(3)
@@ -938,39 +869,44 @@ else:
         st.write(f"**Target 2:** {fmt_p(cp * 1.05)}")
       with s3:
         st.markdown("### 💎 Spot Accumulation Zone")
-        lb_val = float(lower_band.iloc[-1]) if not lower_band.empty and not pd.isna(lower_band.iloc[-1]) else cp * 0.95
+        lb_val = (
+            float(lower_band.iloc[-1])
+            if not lower_band.empty and not pd.isna(lower_band.iloc[-1])
+            else cp * 0.95
+        )
         st.write(f"**Primary Buy:** {fmt_p(lb_val)}")
+    else:
+      st.info("Signal engine synchronizing with market feeds...")
 
-    with tab_orderbook:
-      st.subheader("📊 Institutional ETF & On-Chain Flows")
-      st.table(
-          pd.DataFrame([
-              {
-                  "Institution": "BlackRock (IBIT)",
-                  "Flow": "+$184.2M",
-                  "Bias": "Bullish 🟢",
-              },
-              {
-                  "Institution": "Fidelity (FBTC)",
-                  "Flow": "+$62.5M",
-                  "Bias": "Bullish 🟢",
-              },
-              {
-                  "Institution": "Grayscale (GBTC)",
-                  "Flow": "-$38.0M",
-                  "Bias": "Outflow 🔴",
-              },
-          ])
-      )
+  # TAB 3: INSTITUTIONAL FLOWS
+  with tab_orderbook:
+    st.subheader("📊 Institutional ETF & On-Chain Flows")
+    st.table(
+        pd.DataFrame([
+            {
+                "Institution": "BlackRock (IBIT)",
+                "Flow": "+$184.2M",
+                "Bias": "Bullish 🟢",
+            },
+            {
+                "Institution": "Fidelity (FBTC)",
+                "Flow": "+$62.5M",
+                "Bias": "Bullish 🟢",
+            },
+            {
+                "Institution": "Grayscale (GBTC)",
+                "Flow": "-$38.0M",
+                "Bias": "Outflow 🔴",
+            },
+        ])
+    )
 
-    with tab_forecast:
-      st.subheader("🔮 Directional Horizon Forecast")
-      st.table(
-          pd.DataFrame({
-              "Horizon": ["15 Mins", "1 Hour", "4 Hours", "1 Day"],
-              "Bias": ["BULLISH 🟢", "BULLISH 🟢", "BEARISH 🔴", "BULLISH 🟢"],
-          })
-      )
-  else:
-    st.info("Fetching market data... Please wait a few seconds.")
-
+  # TAB 4: FORECAST
+  with tab_forecast:
+    st.subheader("🔮 Directional Horizon Forecast")
+    st.table(
+        pd.DataFrame({
+            "Horizon": ["15 Mins", "1 Hour", "4 Hours", "1 Day"],
+            "Bias": ["BULLISH 🟢", "BULLISH 🟢", "BEARISH 🔴", "BULLISH 🟢"],
+        })
+    )
