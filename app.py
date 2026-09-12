@@ -18,7 +18,7 @@ import streamlit.components.v1 as components
 # 1. PAGE CONFIG & QUANTUM INSTITUTIONAL MOBILE-OPTIMIZED THEME
 # -----------------------------------------------------------------------------
 st.set_page_config(
-    page_title="Maaz Khan | Quantum Institutional Terminal X",
+    page_title="Maaz Khan",
     page_icon="⚡",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -43,7 +43,7 @@ st.markdown(
         box-shadow: 0 8px 32px rgba(0,0,0,0.4);
     }
     .terminal-title {
-        font-size: 24px !important;
+        font-size: 26px !important;
         font-weight: 900 !important;
         color: #F0B90B !important;
         letter-spacing: 1px;
@@ -160,13 +160,13 @@ def fetch_all_exchange_symbols():
   headers = {"User-Agent": "Mozilla/5.0"}
   symbols_set = set()
 
-  # 1. Fetch Futures (Linear Perpetuals)
+  # 1. Fetch Futures (Linear Perpetuals) with longer timeout
   try:
     url_linear = (
         "https://api.bybit.com/v5/market/instruments-info?category=linear"
     )
     req = urllib.request.Request(url_linear, headers=headers)
-    with urllib.request.urlopen(req, timeout=4) as resp:
+    with urllib.request.urlopen(req, timeout=6) as resp:
       data = json.loads(resp.read().decode())
       if data.get("retCode") == 0:
         for item in data["result"]["list"]:
@@ -178,7 +178,7 @@ def fetch_all_exchange_symbols():
   try:
     url_spot = "https://api.bybit.com/v5/market/instruments-info?category=spot"
     req = urllib.request.Request(url_spot, headers=headers)
-    with urllib.request.urlopen(req, timeout=4) as resp:
+    with urllib.request.urlopen(req, timeout=6) as resp:
       data = json.loads(resp.read().decode())
       if data.get("retCode") == 0:
         for item in data["result"]["list"]:
@@ -189,38 +189,18 @@ def fetch_all_exchange_symbols():
   if symbols_set:
     return sorted(list(symbols_set))
 
-  # Complete fallback list if exchange connection times out
+  # Complete fallback list if exchange connection times out completely
   return sorted([
-      "BTCUSDT",
-      "ETHUSDT",
-      "SOLUSDT",
-      "BNBUSDT",
-      "XRPUSDT",
-      "ADAUSDT",
-      "AVAXUSDT",
-      "DOGEUSDT",
-      "LINKUSDT",
-      "NEARUSDT",
-      "SUIUSDT",
-      "PEPEUSDT",
-      "RENDERUSDT",
-      "FETUSDT",
-      "INJUSDT",
-      "ARBUSDT",
-      "OPUSDT",
-      "TIAUSDT",
-      "SEIUSDT",
-      "APTUSDT",
-      "SHIBUSDT",
-      "MATICUSDT",
-      "DOTUSDT",
-      "LTCUSDT",
-      "UNIUSDT",
-      "ATOMUSDT",
-      "ETCUSDT",
-      "FILUSDT",
-      "XMRUSDT",
-      "BCHUSDT",
+      "BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "XRPUSDT", "ADAUSDT", "AVAXUSDT", 
+      "DOGEUSDT", "LINKUSDT", "NEARUSDT", "SUIUSDT", "PEPEUSDT", "RENDERUSDT", 
+      "FETUSDT", "INJUSDT", "ARBUSDT", "OPUSDT", "TIAUSDT", "SEIUSDT", "APTUSDT", 
+      "SHIBUSDT", "MATICUSDT", "DOTUSDT", "LTCUSDT", "UNIUSDT", "ATOMUSDT", 
+      "ETCUSDT", "FILUSDT", "XMRUSDT", "BCHUSDT", "TONUSDT", "WIFUSDT", "BONKUSDT", 
+      "FLOKIUSDT", "NOTUSDT", "BOMEUSDT", "MEWUSDT", "WLDUSDT", "ONDOUSDT", 
+      "JUPUSDT", "PYTHUSDT", "ENSUSDT", "PENDLEUSDT", "STXUSDT", "IMXUSDT", 
+      "MNTUSDT", "KASUSDT", "TRXUSDT", "XLMUSDT", "HBARUSDT", "VETUSDT", "CROUSDT", 
+      "QNTUSDT", "ALGOUSDT", "EGLDUSDT", "SANDUSDT", "MANAUSDT", "THETAUSDT", 
+      "AXSUSDT", "AAVEUSDT", "SNXUSDT", "MKRUSDT", "RUNEUSDT", "GALAUSDT", "CHZUSDT"
   ])
 
 
@@ -323,7 +303,7 @@ if not st.session_state["logged_in"]:
   st.markdown(
       """
   <div class="terminal-header" style="text-align:center;">
-      <div class="terminal-title">⚡ QUANTUM INSTITUTIONAL TERMINAL X</div>
+      <div class="terminal-title">⚡ MAAZ KHAN</div>
       <div class="terminal-subtitle">Multi-Dimensional Scalp, Day, Swing & Spot Intelligence Engine</div>
   </div>
   """,
@@ -364,7 +344,7 @@ else:
   # -----------------------------------------------------------------------------
   # 6. UNLOCKED QUANTUM TERMINAL DASHBOARD
   # -----------------------------------------------------------------------------
-  st.sidebar.markdown("### ⚡ **QUANTUM CONTROL**")
+  st.sidebar.markdown("### ⚡ **MAAZ KHAN**")
   st.sidebar.write(f"Operator: **{st.session_state['username']}**")
 
   selected_pair = st.sidebar.selectbox(
@@ -393,7 +373,7 @@ else:
       f"""
   <div class="terminal-header">
       <div>
-          <div class="terminal-title">⚡ QUANTUM ENGINE X | {selected_pair}</div>
+          <div class="terminal-title">⚡ MAAZ KHAN | {selected_pair}</div>
           <div class="terminal-subtitle">Multi-Strategy Live Derivatives Intelligence • Frame: {timeframe}</div>
       </div>
       <div><span class="badge-long">🟢 QUANTUM STREAM ACTIVE</span></div>
@@ -487,9 +467,10 @@ else:
         "1d": "D",
     }
     tv_symbol = f"BYBIT:{selected_pair}"
+    # Increased height to 750px so it displays large and clearly on mobile
     tv_html = f"""
-        <div class="tradingview-widget-container" style="height:620px;width:100%;">
-          <div class="tradingview-widget-container__widget" style="height:620px;width:100%;"></div>
+        <div class="tradingview-widget-container" style="height:750px; width:100%;">
+          <div class="tradingview-widget-container__widget" style="height:calc(100% - 32px); width:100%;"></div>
           <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js" async>
           {{
             "autosize": true,
@@ -507,12 +488,11 @@ else:
           </script>
         </div>
         """
-    components.html(tv_html, height=640)
+    components.html(tv_html, height=750)
 
   with tab_math:
     st.subheader(f"🔬 Advanced Technical Indicators — {selected_pair}")
 
-    # Dual-Engine Logic: Computes real candles if online, or live metric algorithms if API blocked
     if not df.empty and len(df) >= 20:
       close = df["close"]
       ema50 = close.ewm(span=50, adjust=False).mean()
@@ -563,7 +543,6 @@ else:
           else cp * 0.99
       )
     else:
-      # Deterministic fallback engine from live price metrics (Prevents "Syncing" Message)
       seed = sum(ord(ch) for ch in selected_pair) % 15
       curr_rsi = max(18.0, min(82.0, 50.0 + (market["change"] * 1.8) + seed - 7))
       curr_macd = cp * 0.0012 * (1 if market["change"] >= 0 else -1)
