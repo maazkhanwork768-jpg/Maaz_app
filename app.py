@@ -11,8 +11,6 @@ import urllib.parse
 import urllib.request
 import numpy as np
 import pandas as pd
-import plotly.graph_objects as go
-from plotly.subplots import make_subplots
 import streamlit as st
 import streamlit.components.v1 as components
 import yfinance as yf
@@ -21,7 +19,7 @@ import yfinance as yf
 # 1. PAGE CONFIG & INSTITUTIONAL DARK THEME DESIGN SYSTEM
 # -----------------------------------------------------------------------------
 st.set_page_config(
-    page_title="Maaz Khan Trading | Fast Scalp Terminal",
+    page_title="Maaz Khan Trading | Real-Time Scalp Terminal",
     page_icon="⚡",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -75,22 +73,13 @@ st.markdown(
     /* Signal Badges */
     .badge-long { background-color: #0ECB81; color: #000000; padding: 4px 12px; border-radius: 4px; font-weight: 800; }
     .badge-short { background-color: #F6465D; color: #FFFFFF; padding: 4px 12px; border-radius: 4px; font-weight: 800; }
-    
-    /* Scalp HUD Box */
-    .scalp-box {
-        background-color: #181a20;
-        border: 1px solid #F0B90B;
-        padding: 15px;
-        border-radius: 8px;
-        margin-bottom: 15px;
-    }
 </style>
 """,
     unsafe_allow_html=True,
 )
 
 # -----------------------------------------------------------------------------
-# 2. AUTO-MIGRATING DATABASE & ENCRYPTED AUTHENTICATION ENGINE
+# 2. AUTO-HEALING DATABASE & ENCRYPTED AUTHENTICATION ENGINE
 # -----------------------------------------------------------------------------
 conn = sqlite3.connect("users.db", check_same_thread=False)
 c = conn.cursor()
@@ -105,15 +94,16 @@ c.execute("""
     )
 """)
 
-try:
-  c.execute("ALTER TABLE users ADD COLUMN contact_type TEXT")
-except sqlite3.OperationalError:
-  pass
+# Safe Schema Inspector (Prevents OperationalError on existing databases)
+c.execute("PRAGMA table_info(users)")
+existing_columns = [col[1] for col in c.fetchall()]
 
-try:
+if "contact_type" not in existing_columns:
+  c.execute("ALTER TABLE users ADD COLUMN contact_type TEXT")
+if "contact_info" not in existing_columns:
   c.execute("ALTER TABLE users ADD COLUMN contact_info TEXT")
-except sqlite3.OperationalError:
-  pass
+if "last_login" not in existing_columns:
+  c.execute("ALTER TABLE users ADD COLUMN last_login TEXT")
 
 conn.commit()
 
@@ -265,11 +255,11 @@ if "reset_target_user" not in st.session_state:
 # -----------------------------------------------------------------------------
 # 4. MULTI-PROVIDER MARKET DATA ENGINE
 # -----------------------------------------------------------------------------
-@st.cache_data(ttl=5)
+@st.cache_data(ttl=3)
 def get_market_ticker_price(symbol="BTCUSDT"):
   headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
 
-  # Endpoint 1: Bybit Global API
+  # Provider 1: Bybit REST API
   try:
     url = f"https://api.bybit.com/v5/market/tickers?category=spot&symbol={symbol}"
     req = urllib.request.Request(url, headers=headers)
@@ -290,7 +280,7 @@ def get_market_ticker_price(symbol="BTCUSDT"):
   except Exception:
     pass
 
-  # Endpoint 2: US Exchange REST API
+  # Provider 2: US REST Fallback
   try:
     url = f"https://api.binance.us/api/v3/ticker/24hr?symbol={symbol}"
     req = urllib.request.Request(url, headers=headers)
@@ -318,7 +308,7 @@ def get_market_ticker_price(symbol="BTCUSDT"):
   }
 
 
-@st.cache_data(ttl=10)
+@st.cache_data(ttl=5)
 def get_market_klines(symbol="BTCUSDT", interval="1m", limit=120):
   headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
 
@@ -369,7 +359,7 @@ if not st.session_state["logged_in"]:
   <div class="terminal-header">
       <div>
           <div class="terminal-title">⚡ MAAZ KHAN TRADING TERMINAL</div>
-          <div class="terminal-subtitle">Institutional Live Market Analytics & Scalp Execution Engine</div>
+          <div class="terminal-subtitle">Institutional Real-Time Market Analytics & Fast Scalp Engine</div>
       </div>
   </div>
   """,
@@ -686,7 +676,6 @@ else:
       index=0,
   )
 
-  # Scalp timeframes prioritized (1m, 5m, 15m default options)
   timeframe = st.sidebar.selectbox(
       "Chart Timeframe:", ["1m", "5m", "15m", "1h", "4h", "1d"], index=0
   )
@@ -746,30 +735,36 @@ else:
 
   st.markdown("---")
 
-  # 🚀 FAST SCALP QUICK-CALC HUD
-  st.markdown("### ⚡ **FAST SCALP EXECUTION HUD**")
-  h1, h2, h3, h4 = st.columns(4)
-  h1.markdown(f"**LONG Entry:** `{fmt_p(cp)}`")
-  h2.markdown(f"**Target 1 (+0.5%):** `{fmt_p(cp * 1.005)}`")
-  h3.markdown(f"**Target 2 (+1.0%):** `{fmt_p(cp * 1.01)}`")
-  h4.markdown(f"**Stop Loss (-0.5%):** `{fmt_p(cp * 0.995)}`")
+  # ⚡ SCALP EXECUTION MATRIX (EXPLICIT TP1, TP2, TP3 & SL)
+  st.markdown("### ⚡ **INSTANT SCALP EXECUTION MATRIX**")
+
+  tp1 = cp * 1.005  # Take Profit 1 (+0.5% Scalp)
+  tp2 = cp * 1.012  # Take Profit 2 (+1.2% Day Trade)
+  tp3 = cp * 1.025  # Take Profit 3 (+2.5% Runner)
+  sl = cp * 0.994  # Stop Loss (-0.6% Strict Risk)
+
+  s_col1, s_col2, s_col3, s_col4, s_col5 = st.columns(5)
+  s_col1.markdown(f"**⚡ Entry Price:**\n`{fmt_p(cp)}`")
+  s_col2.markdown(f"**🎯 TP 1 (+0.5%):**\n`<span style='color:#0ECB81;font-weight:bold'>{fmt_p(tp1)}</span>`", unsafe_allow_html=True)
+  s_col3.markdown(f"**🎯 TP 2 (+1.2%):**\n`<span style='color:#0ECB81;font-weight:bold'>{fmt_p(tp2)}</span>`", unsafe_allow_html=True)
+  s_col4.markdown(f"**🚀 TP 3 (+2.5%):**\n`<span style='color:#0ECB81;font-weight:bold'>{fmt_p(tp3)}</span>`", unsafe_allow_html=True)
+  s_col5.markdown(f"**🛑 Stop Loss (-0.6%):**\n`<span style='color:#F6465D;font-weight:bold'>{fmt_p(sl)}</span>`", unsafe_allow_html=True)
 
   st.markdown("---")
 
   tab_chart, tab_signals, tab_orderbook, tab_forecast = st.tabs([
       "📈 Live Scalp Chart",
-      "⚡ Automated Trading Signals",
+      "⚡ Signal Engine & Setup",
       "📊 Volume & ETF Intelligence",
       "🔮 Horizon Matrix",
   ])
 
-  # TAB 1: DYNAMIC TIMEFRAME TRADINGVIEW CHART (TICKS REAL-TIME LIVE)
+  # TAB 1: OFFICIAL TRADINGVIEW WEBSOCKET ADVANCED CHART (STREAMS REAL-TIME TICKS)
   with tab_chart:
     st.subheader(
-        f"📈 Real-Time Live Chart ({timeframe} Timeframe): {selected_pair}"
+        f"📈 Live WebSocket Charting Engine ({timeframe} Timeframe): {selected_pair}"
     )
 
-    # Dynamic Timeframe Mapping for TradingView WebSocket Ticks
     tv_interval_map = {
         "1m": "1",
         "5m": "5",
@@ -781,12 +776,12 @@ else:
     tv_interval = tv_interval_map.get(timeframe, "1")
     tv_symbol = f"BYBIT:{selected_pair}"
 
+    # Official TradingView Advanced Real-Time Chart Embed
     tradingview_html = f"""
-        <div class="tradingview-widget-container" style="height:650px;width:100%;">
-          <div id="tradingview_chart" style="height:calc(100% - 32px);width:100%;"></div>
-          <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
-          <script type="text/javascript">
-          new TradingView.widget({{
+        <div class="tradingview-widget-container" style="height:620px;width:100%;">
+          <div class="tradingview-widget-container__widget" style="height:620px;width:100%;"></div>
+          <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js" async>
+          {{
             "autosize": true,
             "symbol": "{tv_symbol}",
             "interval": "{tv_interval}",
@@ -794,16 +789,15 @@ else:
             "theme": "dark",
             "style": "1",
             "locale": "en",
-            "toolbar_bg": "#0b0e11",
             "enable_publishing": false,
-            "hide_side_toolbar": false,
             "allow_symbol_change": true,
-            "container_id": "tradingview_chart"
-          }});
+            "calendar": false,
+            "support_host": "https://www.tradingview.com"
+          }}
           </script>
         </div>
         """
-    components.html(tradingview_html, height=660)
+    components.html(tradingview_html, height=640)
 
   # TAB 2: SIGNAL ENGINE
   with tab_signals:
@@ -833,20 +827,21 @@ else:
 
       s1, s2, s3 = st.columns(3)
       with s1:
-        st.markdown("### ⚡ Scalp Signal")
+        st.markdown("### ⚡ Scalp Setup")
         st.markdown(
             "**Bias:**"
             f" {'<span class=\"badge-long\">LONG</span>' if is_bull else '<span class=\"badge-short\">SHORT</span>'}",
             unsafe_allow_html=True,
         )
         st.write(f"**Entry:** {fmt_p(curr_p)}")
-        st.write(f"**Stop:** {fmt_p(curr_p * 0.995)}")
+        st.write(f"**Take Profit 1:** {fmt_p(tp1)}")
+        st.write(f"**Stop Loss:** {fmt_p(sl)}")
       with s2:
         st.markdown("### 📈 Day Trade Setup")
-        st.write(f"**Target 1:** {fmt_p(curr_p * 1.005)}")
-        st.write(f"**Target 2:** {fmt_p(curr_p * 1.01)}")
+        st.write(f"**Take Profit 2:** {fmt_p(tp2)}")
+        st.write(f"**Take Profit 3:** {fmt_p(tp3)}")
       with s3:
-        st.markdown("### 💎 Spot Accumulation Zone")
+        st.markdown("### 💎 Accumulation Zone")
         lb_val = (
             float(lower_band.iloc[-1])
             if not lower_band.empty and not pd.isna(lower_band.iloc[-1])
@@ -888,3 +883,4 @@ else:
             "Bias": ["BULLISH 🟢", "BULLISH 🟢", "BEARISH 🔴", "BULLISH 🟢"],
         })
     )
+
