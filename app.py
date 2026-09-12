@@ -437,7 +437,6 @@ else:
         f"📈 Live WebSocket Charting Engine ({timeframe}): {selected_pair}"
     )
     tv_map = {
-        "1s": "1",
         "1m": "1",
         "5m": "5",
         "15m": "15",
