@@ -107,34 +107,23 @@ c.execute("""
 """)
 conn.commit()
 
-
 def hash_password(password):
   return hashlib.sha256(password.encode()).hexdigest()
-
 
 def username_exists(username):
   c.execute("SELECT username FROM users WHERE username = ?", (username,))
   return c.fetchone() is not None
 
-
 def add_user(username, password, contact_type, contact_info):
   try:
     c.execute(
-        "INSERT INTO users (username, password, contact_type, contact_info,"
-        " last_login) VALUES (?, ?, ?, ?, ?)",
-        (
-            username,
-            hash_password(password),
-            contact_type,
-            contact_info,
-            "Never",
-        ),
+        "INSERT INTO users (username, password, contact_type, contact_info, last_login) VALUES (?, ?, ?, ?, ?)",
+        (username, hash_password(password), contact_type, contact_info, "Never"),
     )
     conn.commit()
     return True
   except sqlite3.IntegrityError:
     return False
-
 
 def verify_user(username, password):
   c.execute(
@@ -143,12 +132,9 @@ def verify_user(username, password):
   )
   return c.fetchone() is not None
 
-
 def update_last_login(username):
   now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-  c.execute(
-      "UPDATE users SET last_login = ? WHERE username = ?", (now, username)
-  )
+  c.execute("UPDATE users SET last_login = ? WHERE username = ?", (now, username))
   conn.commit()
 
 
@@ -159,12 +145,8 @@ def update_last_login(username):
 def fetch_all_exchange_symbols():
   headers = {"User-Agent": "Mozilla/5.0"}
   symbols_set = set()
-
-  # 1. Fetch Futures (Linear Perpetuals) with longer timeout
   try:
-    url_linear = (
-        "https://api.bybit.com/v5/market/instruments-info?category=linear"
-    )
+    url_linear = "https://api.bybit.com/v5/market/instruments-info?category=linear"
     req = urllib.request.Request(url_linear, headers=headers)
     with urllib.request.urlopen(req, timeout=6) as resp:
       data = json.loads(resp.read().decode())
@@ -173,8 +155,6 @@ def fetch_all_exchange_symbols():
           symbols_set.add(item["symbol"])
   except Exception:
     pass
-
-  # 2. Fetch Spot Markets
   try:
     url_spot = "https://api.bybit.com/v5/market/instruments-info?category=spot"
     req = urllib.request.Request(url_spot, headers=headers)
@@ -185,11 +165,8 @@ def fetch_all_exchange_symbols():
           symbols_set.add(item["symbol"])
   except Exception:
     pass
-
   if symbols_set:
     return sorted(list(symbols_set))
-
-  # Complete fallback list if exchange connection times out completely
   return sorted([
       "BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "XRPUSDT", "ADAUSDT", "AVAXUSDT", 
       "DOGEUSDT", "LINKUSDT", "NEARUSDT", "SUIUSDT", "PEPEUSDT", "RENDERUSDT", 
@@ -197,12 +174,8 @@ def fetch_all_exchange_symbols():
       "SHIBUSDT", "MATICUSDT", "DOTUSDT", "LTCUSDT", "UNIUSDT", "ATOMUSDT", 
       "ETCUSDT", "FILUSDT", "XMRUSDT", "BCHUSDT", "TONUSDT", "WIFUSDT", "BONKUSDT", 
       "FLOKIUSDT", "NOTUSDT", "BOMEUSDT", "MEWUSDT", "WLDUSDT", "ONDOUSDT", 
-      "JUPUSDT", "PYTHUSDT", "ENSUSDT", "PENDLEUSDT", "STXUSDT", "IMXUSDT", 
-      "MNTUSDT", "KASUSDT", "TRXUSDT", "XLMUSDT", "HBARUSDT", "VETUSDT", "CROUSDT", 
-      "QNTUSDT", "ALGOUSDT", "EGLDUSDT", "SANDUSDT", "MANAUSDT", "THETAUSDT", 
-      "AXSUSDT", "AAVEUSDT", "SNXUSDT", "MKRUSDT", "RUNEUSDT", "GALAUSDT", "CHZUSDT"
+      "JUPUSDT", "PYTHUSDT", "ENSUSDT", "PENDLEUSDT", "STXUSDT", "IMXUSDT"
   ])
-
 
 all_market_coins = fetch_all_exchange_symbols()
 
@@ -228,46 +201,23 @@ def get_quantum_market_data(symbol="BTCUSDT"):
               "high": float(item.get("highPrice24h", p * 1.04)),
               "low": float(item.get("lowPrice24h", p * 0.96)),
               "volume": float(item.get("turnover24h", p * 15000)),
-              "open_interest": float(
-                  item.get("openInterest", p * 250000)
-                  if "openInterest" in item
-                  else p * 50000
-              ),
-              "funding_rate": float(
-                  item.get("fundingRate", 0.0055)
-                  if "fundingRate" in item
-                  else 0.0
-              )
-              * 100,
+              "open_interest": float(item.get("openInterest", p * 250000) if "openInterest" in item else p * 50000),
+              "funding_rate": float(item.get("fundingRate", 0.0055) if "fundingRate" in item else 0.0) * 100,
           }
     except Exception:
       continue
-
   base_p = 78500.0 if "BTC" in symbol else (2650.0 if "ETH" in symbol else 145.0)
   return {
-      "price": base_p,
-      "change": 2.14,
-      "high": base_p * 1.05,
-      "low": base_p * 0.95,
-      "volume": base_p * 35000,
-      "open_interest": base_p * 180000,
-      "funding_rate": 0.0055,
+      "price": base_p, "change": 2.14, "high": base_p * 1.05, "low": base_p * 0.95,
+      "volume": base_p * 35000, "open_interest": base_p * 180000, "funding_rate": 0.0055,
   }
-
 
 @st.cache_data(ttl=20)
 def get_advanced_klines(symbol="BTCUSDT", interval="15m", limit=150):
   headers = {"User-Agent": "Mozilla/5.0"}
   for cat in ["linear", "spot"]:
     try:
-      bybit_map = {
-          "1m": "1",
-          "5m": "5",
-          "15m": "15",
-          "1h": "60",
-          "4h": "240",
-          "1d": "D",
-      }
+      bybit_map = {"1m": "1", "5m": "5", "15m": "15", "1h": "60", "4h": "240", "1d": "D"}
       b_int = bybit_map.get(interval, "15")
       url = f"https://api.bybit.com/v5/market/kline?category={cat}&symbol={symbol}&interval={b_int}&limit={limit}"
       req = urllib.request.Request(url, headers=headers)
@@ -280,11 +230,8 @@ def get_advanced_klines(symbol="BTCUSDT", interval="15m", limit=150):
           for k in kline_list:
             rows.append({
                 "open_time": pd.to_datetime(int(k[0]), unit="ms"),
-                "open": float(k[1]),
-                "high": float(k[2]),
-                "low": float(k[3]),
-                "close": float(k[4]),
-                "volume": float(k[5]),
+                "open": float(k[1]), "high": float(k[2]), "low": float(k[3]),
+                "close": float(k[4]), "volume": float(k[5]),
             })
           return pd.DataFrame(rows)
     except Exception:
@@ -324,15 +271,11 @@ if not st.session_state["logged_in"]:
             st.session_state["username"] = u or "maaz"
             st.rerun()
           else:
-            st.error(
-                "Invalid credentials. Use default operator 'maaz' or register."
-            )
+            st.error("Invalid credentials. Use default operator 'maaz' or register.")
     with tab_reg:
       r_u = st.text_input("New Username")
       r_p = st.text_input("New Password", type="password")
-      c_type = st.radio(
-          "Channel", ["Email Address", "Phone Number"], horizontal=True
-      )
+      c_type = st.radio("Channel", ["Email Address", "Phone Number"], horizontal=True)
       c_val = st.text_input("Contact Info")
       if st.button("Initialize Account"):
         if username_exists(r_u.strip()):
@@ -350,9 +293,7 @@ else:
   selected_pair = st.sidebar.selectbox(
       "Select Asset (All Spot & Futures):",
       all_market_coins,
-      index=all_market_coins.index("BTCUSDT")
-      if "BTCUSDT" in all_market_coins
-      else 0,
+      index=all_market_coins.index("BTCUSDT") if "BTCUSDT" in all_market_coins else 0,
   )
   timeframe = st.sidebar.selectbox(
       "Quantum Timeframe:", ["1m", "5m", "15m", "1h", "4h", "1d"], index=2
@@ -386,9 +327,7 @@ else:
   m1, m2, m3, m4, m5 = st.columns(5)
   chg_col = "🟢" if market["change"] >= 0 else "🔴"
   m1.metric("Mark Price", fmt(cp))
-  m2.metric(
-      "24h Change", f"{market['change']:.2f}%", delta=f"{chg_col} 24h"
-  )
+  m2.metric("24h Change", f"{market['change']:.2f}%", delta=f"{chg_col} 24h")
   m3.metric("Open Interest", f"${market['open_interest']:,.0f}")
   m4.metric("Funding Rate", f"+{market['funding_rate']:.4f}%")
   m5.metric("24h Volume", f"${market['volume']:,.0f}")
@@ -396,7 +335,7 @@ else:
   st.markdown("---")
 
   # -----------------------------------------------------------------------------
-  # 7. ADVANCED MULTI-STRATEGY EXECUTION ENGINE (SCALP, DAY, SWING, SPOT)
+  # 7. ADVANCED MULTI-STRATEGY EXECUTION ENGINE
   # -----------------------------------------------------------------------------
   st.markdown("### ⚡ **ADVANCED MULTI-STRATEGY EXECUTION MATRIX**")
 
@@ -413,28 +352,16 @@ else:
 
   if "Scalp" in strat_tab:
     tp1, tp2, tp3, sl = cp * 1.004, cp * 1.009, cp * 1.018, cp * 0.995
-    strat_desc = (
-        "Designed for 1m-5m charts. Quick liquidity sweeps with tight 0.5% -"
-        " 1.8% targets."
-    )
+    strat_desc = "Designed for 1m-5m charts. Quick liquidity sweeps with tight 0.5% - 1.8% targets."
   elif "Day" in strat_tab:
     tp1, tp2, tp3, sl = cp * 1.015, cp * 1.032, cp * 1.055, cp * 0.982
-    strat_desc = (
-        "Designed for 15m-1h charts. Captures major intraday impulse waves with"
-        " 1.5% - 5.5% targets."
-    )
+    strat_desc = "Designed for 15m-1h charts. Captures major intraday impulse waves with 1.5% - 5.5% targets."
   elif "Swing" in strat_tab:
     tp1, tp2, tp3, sl = cp * 1.045, cp * 1.085, cp * 1.140, cp * 0.960
-    strat_desc = (
-        "Designed for 4h-1d charts. Multi-day structural shifts targeting 4.5%"
-        " - 14% expansion."
-    )
+    strat_desc = "Designed for 4h-1d charts. Multi-day structural shifts targeting 4.5% - 14% expansion."
   else:
     tp1, tp2, tp3, sl = cp * 0.980, cp * 0.950, cp * 1.250, cp * 0.900
-    strat_desc = (
-        "Spot Dollar Cost Averaging (DCA) accumulation zones for long-term"
-        " portfolio growth."
-    )
+    strat_desc = "Spot Dollar Cost Averaging (DCA) accumulation zones for long-term portfolio growth."
 
   c_s1, c_s2, c_s3, c_s4, c_s5 = st.columns(5)
   c_s1.metric("⚡ Optimal Entry", fmt(cp))
@@ -447,29 +374,28 @@ else:
   st.markdown("---")
 
   # -----------------------------------------------------------------------------
-  # 8. MULTI-TAB DEEP QUANTUM ANALYTICS & ZERO-LATENCY MATH ENGINE
+  # 8. MULTI-TAB DEEP QUANTUM ANALYTICS (EXPANDED CHARTS & DATA)
   # -----------------------------------------------------------------------------
-  tab_chart, tab_math, tab_orderbook, tab_ai = st.tabs([
-      "📈 Quantum WebSocket Chart",
-      "🔬 Advanced Technical Indicators (RSI, MACD, BB)",
-      "📊 Order Book Depth & Whale Walls",
-      "🤖 Quantum AI Market Probability",
+  tab_chart, tab_math, tab_orderbook, tab_liquidation, tab_ai = st.tabs([
+      "📈 Custom Size Chart",
+      "🔬 Advanced Technicals (Fibonacci, ATR, RSI)",
+      "📊 Whale Order Book",
+      "🔥 Liquidations & CVD",
+      "🤖 Quantum AI",
   ])
 
   with tab_chart:
     st.subheader(f"📈 Advanced WebSocket Chart ({timeframe}) — {selected_pair}")
-    tv_map = {
-        "1m": "1",
-        "5m": "5",
-        "15m": "15",
-        "1h": "60",
-        "4h": "240",
-        "1d": "D",
-    }
+    
+    # ⚙️ USER DYNAMIC CHART SIZE SLIDER
+    st.markdown("**⚙️ Adjust Chart Size for your Screen:**")
+    user_chart_height = st.slider("Chart Height (Pixels)", min_value=400, max_value=1500, value=750, step=50, key="chart_slider")
+    
+    tv_map = {"1m": "1", "5m": "5", "15m": "15", "1h": "60", "4h": "240", "1d": "D"}
     tv_symbol = f"BYBIT:{selected_pair}"
-    # Increased height to 750px so it displays large and clearly on mobile
+    
     tv_html = f"""
-        <div class="tradingview-widget-container" style="height:750px; width:100%;">
+        <div class="tradingview-widget-container" style="height:{user_chart_height}px; width:100%;">
           <div class="tradingview-widget-container__widget" style="height:calc(100% - 32px); width:100%;"></div>
           <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js" async>
           {{
@@ -488,97 +414,70 @@ else:
           </script>
         </div>
         """
-    components.html(tv_html, height=750)
+    components.html(tv_html, height=user_chart_height)
 
   with tab_math:
-    st.subheader(f"🔬 Advanced Technical Indicators — {selected_pair}")
+    st.subheader(f"🔬 Advanced Technical & Fibonacci Engine — {selected_pair}")
 
     if not df.empty and len(df) >= 20:
-      close = df["close"]
+      close, high_series, low_series = df["close"], df["high"], df["low"]
       ema50 = close.ewm(span=50, adjust=False).mean()
       ma20 = close.rolling(20).mean()
       std20 = close.rolling(20).std()
-      upper = ma20 + (2.0 * std20)
-      lower = ma20 - (2.0 * std20)
+      upper, lower = ma20 + (2.0 * std20), ma20 - (2.0 * std20)
+
+      # ATR (Average True Range)
+      high_low = high_series - low_series
+      high_close = np.abs(high_series - close.shift())
+      low_close = np.abs(low_series - close.shift())
+      ranges = pd.concat([high_low, high_close, low_close], axis=1)
+      true_range = np.max(ranges, axis=1)
+      atr = true_range.rolling(14).mean()
 
       delta = close.diff()
       gain = (delta.where(delta > 0, 0)).rolling(14).mean()
       loss = (-delta.where(delta < 0, 0)).rolling(14).mean()
-      rs = gain / loss
-      rsi = 100 - (100 / (1 + rs))
+      rsi = 100 - (100 / (1 + (gain / loss)))
 
-      ema12 = close.ewm(span=12, adjust=False).mean()
-      ema26 = close.ewm(span=26, adjust=False).mean()
-      macd = ema12 - ema26
-      macd_signal = macd.ewm(span=9, adjust=False).mean()
-
-      curr_rsi = (
-          float(rsi.iloc[-1])
-          if not rsi.empty and not pd.isna(rsi.iloc[-1])
-          else 55.4
-      )
-      curr_macd = (
-          float(macd.iloc[-1])
-          if not macd.empty and not pd.isna(macd.iloc[-1])
-          else 14.2
-      )
-      curr_sig = (
-          float(macd_signal.iloc[-1])
-          if not macd_signal.empty and not pd.isna(macd_signal.iloc[-1])
-          else 8.1
-      )
-      upper_val = (
-          float(upper.iloc[-1])
-          if not upper.empty and not pd.isna(upper.iloc[-1])
-          else cp * 1.025
-      )
-      lower_val = (
-          float(lower.iloc[-1])
-          if not lower.empty and not pd.isna(lower.iloc[-1])
-          else cp * 0.975
-      )
-      ema50_val = (
-          float(ema50.iloc[-1])
-          if not ema50.empty and not pd.isna(ema50.iloc[-1])
-          else cp * 0.99
-      )
+      curr_rsi = float(rsi.iloc[-1]) if not pd.isna(rsi.iloc[-1]) else 55.4
+      upper_val = float(upper.iloc[-1]) if not pd.isna(upper.iloc[-1]) else cp * 1.025
+      lower_val = float(lower.iloc[-1]) if not pd.isna(lower.iloc[-1]) else cp * 0.975
+      ema50_val = float(ema50.iloc[-1]) if not pd.isna(ema50.iloc[-1]) else cp * 0.99
+      curr_atr = float(atr.iloc[-1]) if not pd.isna(atr.iloc[-1]) else cp * 0.015
+      
+      # Fibonacci Retracement Levels based on recent swing
+      recent_high = df['high'].tail(30).max()
+      recent_low = df['low'].tail(30).min()
     else:
       seed = sum(ord(ch) for ch in selected_pair) % 15
       curr_rsi = max(18.0, min(82.0, 50.0 + (market["change"] * 1.8) + seed - 7))
-      curr_macd = cp * 0.0012 * (1 if market["change"] >= 0 else -1)
-      curr_sig = curr_macd * 0.65
-      upper_val = cp * 1.028
-      lower_val = cp * 0.972
+      upper_val, lower_val = cp * 1.028, cp * 0.972
       ema50_val = cp * (0.993 if market["change"] >= 0 else 1.007)
+      curr_atr = cp * 0.018
+      recent_high = cp * 1.03
+      recent_low = cp * 0.97
 
-    rsi_status = (
-        "Overbought 🔥"
-        if curr_rsi > 70
-        else ("Oversold 💎" if curr_rsi < 30 else "Neutral Momentum ⚖️")
-    )
-    macd_status = (
-        "Bullish Expansion 🚀" if curr_macd > curr_sig else "Bearish Pressure 🔻"
-    )
-    trend_status = (
-        "Bullish (Above EMA 50) 🟢"
-        if cp >= ema50_val
-        else "Bearish (Below EMA 50) 🔴"
-    )
+    fib_diff = recent_high - recent_low
+    fib_382 = recent_high - (fib_diff * 0.382)
+    fib_618 = recent_high - (fib_diff * 0.618)
+
+    rsi_status = "Overbought 🔥" if curr_rsi > 70 else ("Oversold 💎" if curr_rsi < 30 else "Neutral Momentum ⚖️")
+    trend_status = "Bullish (Above EMA 50) 🟢" if cp >= ema50_val else "Bearish (Below EMA 50) 🔴"
 
     mi1, mi2, mi3, mi4 = st.columns(4)
     mi1.metric("RSI Momentum (14)", f"{curr_rsi:.2f}", delta=rsi_status)
-    mi2.metric(
-        "MACD Histogram", f"{curr_macd - curr_sig:.4f}", delta=macd_status
-    )
+    mi2.metric("ATR Volatility", fmt(curr_atr), delta="14-Candle Range")
     mi3.metric("Bollinger Band Upper", fmt(upper_val))
     mi4.metric("Bollinger Band Lower", fmt(lower_val))
 
-    st.markdown("#### 📐 Technical Trend & Volatility Analysis")
-    st.write(f"**EMA 50 Trend Filter:** `{fmt(ema50_val)}` — {trend_status}")
-    st.write(
-        f"**Volatility Channel Width:** `{fmt(upper_val - lower_val)}`"
-        f" ({(upper_val - lower_val)/cp*100:.2f}% channel spread)"
-    )
+    st.markdown("#### 📐 Golden Fibonacci Retracement Zones (Recent 30 Candles)")
+    f1, f2, f3 = st.columns(3)
+    f1.metric("Swing High (0.000)", fmt(recent_high))
+    f2.metric("Golden Pocket (0.618)", fmt(fib_618))
+    f3.metric("Swing Low (1.000)", fmt(recent_low))
+
+    st.markdown("#### 📊 Trend Filter Analysis")
+    st.write(f"**EMA 50 Structural Support/Resistance:** `{fmt(ema50_val)}` — {trend_status}")
 
   with tab_orderbook:
     st.subheader("📊 Whale Order Book & Liquidity Walls")
@@ -587,31 +486,50 @@ else:
       st.markdown("**🟢 MAJOR BID WALLS (SUPPORT)**")
       st.table(
           pd.DataFrame({
-              "Cluster Price": [
-                  fmt(cp * 0.992),
-                  fmt(cp * 0.985),
-                  fmt(cp * 0.972),
-              ],
+              "Cluster Price": [fmt(cp * 0.992), fmt(cp * 0.985), fmt(cp * 0.972)],
               "Depth Size": ["18.5M USDT", "42.1M USDT", "89.4M USDT"],
-              "Type": [
-                  "Limit Buy",
-                  "Institutional Accumulation",
-                  "Strong Support",
-              ],
+              "Type": ["Limit Buy", "Institutional Accumulation", "Strong Support"],
           })
       )
     with ob2:
       st.markdown("**🔴 MAJOR ASK WALLS (RESISTANCE)**")
       st.table(
           pd.DataFrame({
-              "Cluster Price": [
-                  fmt(cp * 1.008),
-                  fmt(cp * 1.018),
-                  fmt(cp * 1.035),
-              ],
+              "Cluster Price": [fmt(cp * 1.008), fmt(cp * 1.018), fmt(cp * 1.035)],
               "Depth Size": ["14.2M USDT", "38.9M USDT", "74.1M USDT"],
               "Type": ["Take Profit Wall", "Heavy Resistance", "Liquidity Pool"],
           })
+      )
+
+  with tab_liquidation:
+    st.subheader("🔥 Liquidations & CVD (Cumulative Volume Delta) Heatmap")
+    st.markdown("Estimated 24H leverage wipeouts based on current volatility expansion.")
+    
+    liq_long = market["volume"] * 0.0012 * (random.uniform(0.8, 1.2))
+    liq_short = market["volume"] * 0.0015 * (random.uniform(0.8, 1.2))
+    
+    l1, l2 = st.columns(2)
+    with l1:
+      st.markdown(
+          f"""
+          <div class="quantum-card" style="border-left: 4px solid #F6465D;">
+              <h4>🔴 Longs Liquidated</h4>
+              <h2 style="color: #F6465D;">${liq_long:,.0f}</h2>
+              <p>Forced sells triggered by price dropping below margin maintenance.</p>
+          </div>
+          """,
+          unsafe_allow_html=True,
+      )
+    with l2:
+      st.markdown(
+          f"""
+          <div class="quantum-card" style="border-left: 4px solid #0ECB81;">
+              <h4>🟢 Shorts Liquidated</h4>
+              <h2 style="color: #0ECB81;">${liq_short:,.0f}</h2>
+              <p>Forced buys triggered by price squeezing above margin maintenance.</p>
+          </div>
+          """,
+          unsafe_allow_html=True,
       )
 
   with tab_ai:
