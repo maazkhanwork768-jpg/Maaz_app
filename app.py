@@ -16,10 +16,10 @@ from plotly.subplots import make_subplots
 import streamlit as st
 
 # -----------------------------------------------------------------------------
-# 1. PAGE CONFIG & BINANCE PRO STYLING
+# 1. PAGE CONFIG & BINANCE PRO DARK THEME DESIGN SYSTEM
 # -----------------------------------------------------------------------------
 st.set_page_config(
-    page_title="Maaz Khan Trading | Binance Pro Terminal",
+    page_title="Maaz Khan Trading | Institutional Terminal",
     page_icon="🟡",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -28,6 +28,7 @@ st.set_page_config(
 st.markdown(
     """
 <style>
+    /* Binance Pro Core Palette */
     .stApp { background-color: #0b0e11; color: #EAECEF; }
     
     section[data-testid="stSidebar"] {
@@ -35,6 +36,7 @@ st.markdown(
         border-right: 1px solid #2b313a;
     }
 
+    /* Binance Header Banner */
     .binance-header {
         background: linear-gradient(180deg, #181a20 0%, #0b0e11 100%);
         padding: 20px 24px;
@@ -58,6 +60,7 @@ st.markdown(
         margin-top: 4px;
     }
 
+    /* Styled Metric Cards */
     div[data-testid="stMetric"] {
         background-color: #181a20;
         border: 1px solid #2b313a;
@@ -67,6 +70,7 @@ st.markdown(
     div[data-testid="stMetricLabel"] { color: #848E9C !important; font-size: 13px; }
     div[data-testid="stMetricValue"] { color: #EAECEF !important; font-weight: 700; }
 
+    /* Custom Badges */
     .badge-long { background-color: #0ECB81; color: #000000; padding: 4px 12px; border-radius: 4px; font-weight: 800; }
     .badge-short { background-color: #F6465D; color: #FFFFFF; padding: 4px 12px; border-radius: 4px; font-weight: 800; }
 </style>
@@ -75,7 +79,7 @@ st.markdown(
 )
 
 # -----------------------------------------------------------------------------
-# 2. AUTO-MIGRATING DATABASE & AUTHENTICATION ENGINE
+# 2. AUTO-MIGRATING DATABASE & ENCRYPTED AUTHENTICATION ENGINE
 # -----------------------------------------------------------------------------
 conn = sqlite3.connect("users.db", check_same_thread=False)
 c = conn.cursor()
@@ -148,10 +152,9 @@ def update_last_login(username):
 
 
 # -----------------------------------------------------------------------------
-# 3. REAL EMAIL & SMS OTP DISPATCH HELPERS
+# 3. EMAIL & SMS OTP DISPATCH ENGINE
 # -----------------------------------------------------------------------------
 def send_otp_email(receiver_email, otp_code):
-  """Sends actual email using Gmail SMTP if credentials exist in st.secrets."""
   try:
     sender_email = st.secrets.get("SMTP_EMAIL", "")
     sender_password = st.secrets.get("SMTP_PASSWORD", "")
@@ -170,13 +173,12 @@ def send_otp_email(receiver_email, otp_code):
         server.sendmail(sender_email, receiver_email, msg.as_string())
       return True, "Email sent successfully to your inbox!"
     else:
-      return False, "SMTP credentials missing from Streamlit Secrets."
+      return False, "SMTP credentials missing from Secrets."
   except Exception as e:
     return False, f"Email delivery error: {str(e)}"
 
 
 def send_otp_sms(receiver_phone, otp_code):
-  """Sends actual SMS using Twilio REST API if credentials exist in st.secrets."""
   try:
     account_sid = st.secrets.get("TWILIO_ACCOUNT_SID", "")
     auth_token = st.secrets.get("TWILIO_AUTH_TOKEN", "")
@@ -202,15 +204,15 @@ def send_otp_sms(receiver_phone, otp_code):
           },
       )
       with urllib.request.urlopen(req, timeout=6) as resp:
-        return True, "SMS message sent successfully to your phone!"
+        return True, "SMS sent successfully to your mobile number!"
     else:
-      return False, "Twilio SMS credentials missing from Streamlit Secrets."
+      return False, "Twilio SMS credentials missing from Secrets."
   except Exception as e:
     return False, f"SMS delivery error: {str(e)}"
 
 
-# CAPTCHA Initialization
-if "cap_a" not in st.session_state:
+# Stable CAPTCHA Initialization
+if "cap_a" not in st.session_state or "cap_b" not in st.session_state:
   st.session_state["cap_a"] = random.randint(1, 9)
   st.session_state["cap_b"] = random.randint(1, 9)
 
@@ -220,7 +222,7 @@ def reset_captcha():
   st.session_state["cap_b"] = random.randint(1, 9)
 
 
-# OTP Session State
+# Registration State Machine
 if "reg_step" not in st.session_state:
   st.session_state["reg_step"] = "details"
 if "generated_otp" not in st.session_state:
@@ -229,7 +231,7 @@ if "pending_user" not in st.session_state:
   st.session_state["pending_user"] = {}
 
 # -----------------------------------------------------------------------------
-# 4. BINANCE DATA ENGINE
+# 4. DIRECT BINANCE PUBLIC API DATA ENGINE
 # -----------------------------------------------------------------------------
 @st.cache_data(ttl=15)
 def get_binance_ticker_price(symbol="BTCUSDT"):
@@ -290,7 +292,7 @@ def get_binance_klines(symbol="BTCUSDT", interval="1d", limit=120):
 
 
 # -----------------------------------------------------------------------------
-# 5. AUTHENTICATION GATEKEEPER WITH REAL DISPATCH & FALLBACK
+# 5. SECURE AUTHENTICATION GATEKEEPER
 # -----------------------------------------------------------------------------
 if "logged_in" not in st.session_state:
   st.session_state["logged_in"] = False
@@ -313,6 +315,7 @@ if not st.session_state["logged_in"]:
   with col2:
     tab_login, tab_reg = st.tabs(["🔒 Account Login", "📝 Trader Registration"])
 
+    # LOGIN FORM (Supports browser save password prompts)
     with tab_login:
       with st.form("login_form"):
         st.subheader("Login to Terminal")
@@ -336,8 +339,10 @@ if not st.session_state["logged_in"]:
         if submit_login:
           ans = st.session_state["cap_a"] + st.session_state["cap_b"]
           if str(l_captcha).strip() != str(ans):
-            st.error("Incorrect CAPTCHA answer.")
-            reset_captcha()
+            st.error(
+                f"Incorrect CAPTCHA answer. What is {st.session_state['cap_a']}"
+                f" + {st.session_state['cap_b']}?"
+            )
           elif verify_user(l_user, l_pass):
             update_last_login(l_user)
             st.session_state["logged_in"] = True
@@ -345,8 +350,8 @@ if not st.session_state["logged_in"]:
             st.rerun()
           else:
             st.error("Invalid username or password.")
-            reset_captcha()
 
+    # REGISTRATION FORM (Unique Usernames + Country Code + OTP)
     with tab_reg:
       if st.session_state["reg_step"] == "details":
         st.subheader("Create Account")
@@ -394,8 +399,10 @@ if not st.session_state["logged_in"]:
           ans = st.session_state["cap_a"] + st.session_state["cap_b"]
 
           if str(r_captcha).strip() != str(ans):
-            st.error("Incorrect CAPTCHA answer.")
-            reset_captcha()
+            st.error(
+                f"Incorrect CAPTCHA answer. What is {st.session_state['cap_a']}"
+                f" + {st.session_state['cap_b']}?"
+            )
           elif not r_user or not r_pass or not contact_val:
             st.error("Please fill in all required fields.")
           elif username_exists(r_user.strip()):
@@ -408,7 +415,7 @@ if not st.session_state["logged_in"]:
                 r"^\+\d{10,14}$", contact_val
             ):
               st.error(
-                  "Invalid phone number format. Please check country code and"
+                  "Invalid phone number format. Check your country code and"
                   " digits."
               )
               valid_format = False
@@ -428,7 +435,6 @@ if not st.session_state["logged_in"]:
                   "contact_info": contact_val,
               }
 
-              # Dispatch OTP via real Email or SMS
               if contact_method == "Email Address":
                 sent, msg = send_otp_email(contact_val, otp_code)
               else:
@@ -448,7 +454,7 @@ if not st.session_state["logged_in"]:
         st.info(f"Verification code sent to {pending['contact_info']}")
 
         if sent_status:
-          st.success(f"✅ Live Dispatch: {status_msg}")
+          st.success(f"✅ {status_msg}")
         else:
           st.warning(
               f"⚠️ {status_msg}\n\n"
@@ -490,7 +496,7 @@ if not st.session_state["logged_in"]:
 
 else:
   # -----------------------------------------------------------------------------
-  # 6. UNLOCKED BINANCE PRO DASHBOARD
+  # 6. UNLOCKED BINANCE PRO TRADING DASHBOARD
   # -----------------------------------------------------------------------------
   st.sidebar.markdown("### 🟡 **BINANCE TERMINAL**")
   st.sidebar.write(f"Logged in as: **{st.session_state['username']}**")
