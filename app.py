@@ -21,7 +21,7 @@ import yfinance as yf
 # 1. PAGE CONFIG & INSTITUTIONAL DARK THEME DESIGN SYSTEM
 # -----------------------------------------------------------------------------
 st.set_page_config(
-    page_title="Maaz Khan Trading | Institutional Terminal",
+    page_title="Maaz Khan Trading | Fast Scalp Terminal",
     page_icon="⚡",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -50,7 +50,7 @@ st.markdown(
         align-items: center;
     }
     .terminal-title {
-        font-size: 28px !important;
+        font-size: 26px !important;
         font-weight: 800 !important;
         color: #F0B90B !important;
         letter-spacing: 1px;
@@ -75,6 +75,15 @@ st.markdown(
     /* Signal Badges */
     .badge-long { background-color: #0ECB81; color: #000000; padding: 4px 12px; border-radius: 4px; font-weight: 800; }
     .badge-short { background-color: #F6465D; color: #FFFFFF; padding: 4px 12px; border-radius: 4px; font-weight: 800; }
+    
+    /* Scalp HUD Box */
+    .scalp-box {
+        background-color: #181a20;
+        border: 1px solid #F0B90B;
+        padding: 15px;
+        border-radius: 8px;
+        margin-bottom: 15px;
+    }
 </style>
 """,
     unsafe_allow_html=True,
@@ -254,9 +263,9 @@ if "reset_target_user" not in st.session_state:
   st.session_state["reset_target_user"] = ""
 
 # -----------------------------------------------------------------------------
-# 4. MULTI-PROVIDER MARKET DATA ENGINE (FAST FAILOVER)
+# 4. MULTI-PROVIDER MARKET DATA ENGINE
 # -----------------------------------------------------------------------------
-@st.cache_data(ttl=10)
+@st.cache_data(ttl=5)
 def get_market_ticker_price(symbol="BTCUSDT"):
   headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
 
@@ -264,7 +273,7 @@ def get_market_ticker_price(symbol="BTCUSDT"):
   try:
     url = f"https://api.bybit.com/v5/market/tickers?category=spot&symbol={symbol}"
     req = urllib.request.Request(url, headers=headers)
-    with urllib.request.urlopen(req, timeout=3) as resp:
+    with urllib.request.urlopen(req, timeout=2) as resp:
       data = json.loads(resp.read().decode())
       if data.get("retCode") == 0 and data.get("result", {}).get("list"):
         item = data["result"]["list"][0]
@@ -285,7 +294,7 @@ def get_market_ticker_price(symbol="BTCUSDT"):
   try:
     url = f"https://api.binance.us/api/v3/ticker/24hr?symbol={symbol}"
     req = urllib.request.Request(url, headers=headers)
-    with urllib.request.urlopen(req, timeout=3) as resp:
+    with urllib.request.urlopen(req, timeout=2) as resp:
       data = json.loads(resp.read().decode())
       if "lastPrice" in data:
         return {
@@ -299,29 +308,6 @@ def get_market_ticker_price(symbol="BTCUSDT"):
   except Exception:
     pass
 
-  # Endpoint 3: Yahoo Finance Fallback
-  try:
-    yf_symbol = symbol.replace("USDT", "-USD")
-    df = yf.download(yf_symbol, period="2d", interval="1d", progress=False)
-    if not df.empty and len(df) >= 1:
-      if isinstance(df.columns, pd.MultiIndex):
-        df.columns = df.columns.get_level_values(0)
-      curr_p = float(df["Close"].iloc[-1])
-      prev_p = float(df["Close"].iloc[-2]) if len(df) > 1 else curr_p
-      chg = (
-          ((curr_p - prev_p) / prev_p) * 100 if prev_p > 0 else 0.0
-      )
-      return {
-          "price": curr_p,
-          "change": chg,
-          "high": float(df["High"].iloc[-1]),
-          "low": float(df["Low"].iloc[-1]),
-          "volume": float(df["Volume"].iloc[-1]),
-          "quote_volume": float(df["Volume"].iloc[-1] * curr_p),
-      }
-  except Exception:
-    pass
-
   return {
       "price": 0.0,
       "change": 0.0,
@@ -332,11 +318,10 @@ def get_market_ticker_price(symbol="BTCUSDT"):
   }
 
 
-@st.cache_data(ttl=15)
-def get_market_klines(symbol="BTCUSDT", interval="1d", limit=120):
+@st.cache_data(ttl=10)
+def get_market_klines(symbol="BTCUSDT", interval="1m", limit=120):
   headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
 
-  # Endpoint 1: Bybit Kline Feed
   try:
     bybit_map = {
         "1m": "1",
@@ -346,7 +331,7 @@ def get_market_klines(symbol="BTCUSDT", interval="1d", limit=120):
         "4h": "240",
         "1d": "D",
     }
-    b_int = bybit_map.get(interval, "D")
+    b_int = bybit_map.get(interval, "1")
     url = f"https://api.bybit.com/v5/market/kline?category=spot&symbol={symbol}&interval={b_int}&limit={limit}"
     req = urllib.request.Request(url, headers=headers)
     with urllib.request.urlopen(req, timeout=3) as resp:
@@ -368,37 +353,6 @@ def get_market_klines(symbol="BTCUSDT", interval="1d", limit=120):
   except Exception:
     pass
 
-  # Endpoint 2: US Exchange Kline Feed
-  try:
-    url = f"https://api.binance.us/api/v3/klines?symbol={symbol}&interval={interval}&limit={limit}"
-    req = urllib.request.Request(url, headers=headers)
-    with urllib.request.urlopen(req, timeout=3) as resp:
-      data = json.loads(resp.read().decode())
-      if isinstance(data, list) and len(data) > 0:
-        df = pd.DataFrame(
-            data,
-            columns=[
-                "open_time",
-                "open",
-                "high",
-                "low",
-                "close",
-                "volume",
-                "close_time",
-                "qav",
-                "trades",
-                "tbb",
-                "tbq",
-                "ignore",
-            ],
-        )
-        df["open_time"] = pd.to_datetime(df["open_time"], unit="ms")
-        for col in ["open", "high", "low", "close", "volume"]:
-          df[col] = df[col].astype(float)
-        return df
-  except Exception:
-    pass
-
   return pd.DataFrame()
 
 
@@ -414,8 +368,8 @@ if not st.session_state["logged_in"]:
       """
   <div class="terminal-header">
       <div>
-          <div class="terminal-title">⚡ MAAZ KHAN TRADING</div>
-          <div class="terminal-subtitle">Institutional Live Market Analytics & Algorithmic Execution Terminal</div>
+          <div class="terminal-title">⚡ MAAZ KHAN TRADING TERMINAL</div>
+          <div class="terminal-subtitle">Institutional Live Market Analytics & Scalp Execution Engine</div>
       </div>
   </div>
   """,
@@ -430,7 +384,6 @@ if not st.session_state["logged_in"]:
         "🔑 Reset Password",
     ])
 
-    # 1. LOGIN FORM
     with tab_login:
       with st.form("login_form"):
         st.subheader("Login to Terminal")
@@ -466,7 +419,6 @@ if not st.session_state["logged_in"]:
           else:
             st.error("Invalid username or password.")
 
-    # 2. REGISTRATION FORM
     with tab_reg:
       if st.session_state["reg_step"] == "details":
         st.subheader("Create Account")
@@ -608,7 +560,6 @@ if not st.session_state["logged_in"]:
             st.session_state["reg_step"] = "details"
             st.rerun()
 
-    # 3. FORGOT PASSWORD FORM
     with tab_forgot:
       if st.session_state["reset_step"] == "request":
         st.subheader("Reset Forgotten Password")
@@ -715,25 +666,6 @@ else:
   # -----------------------------------------------------------------------------
   st.sidebar.markdown("### ⚡ **MK TERMINAL**")
   st.sidebar.write(f"Logged in as: **{st.session_state['username']}**")
-  if st.sidebar.button("Logout"):
-    st.session_state["logged_in"] = False
-    st.session_state["username"] = ""
-    st.rerun()
-
-  if st.session_state["username"] == "maaz":
-    with st.sidebar.expander("Admin: Registered Users"):
-      c.execute(
-          "SELECT username, contact_type, contact_info, last_login FROM users"
-      )
-      st.table([
-          {
-              "User": r[0],
-              "Type": r[1],
-              "Contact": r[2],
-              "Last Login": r[3],
-          }
-          for r in c.fetchall()
-      ])
 
   selected_pair = st.sidebar.selectbox(
       "Select Market Pair:",
@@ -754,19 +686,41 @@ else:
       index=0,
   )
 
+  # Scalp timeframes prioritized (1m, 5m, 15m default options)
   timeframe = st.sidebar.selectbox(
-      "Chart Timeframe:", ["1m", "5m", "15m", "1h", "4h", "1d"], index=5
+      "Chart Timeframe:", ["1m", "5m", "15m", "1h", "4h", "1d"], index=0
   )
+
+  if st.sidebar.button("Logout"):
+    st.session_state["logged_in"] = False
+    st.session_state["username"] = ""
+    st.rerun()
+
+  if st.session_state["username"] == "maaz":
+    with st.sidebar.expander("Admin: Registered Users"):
+      c.execute(
+          "SELECT username, contact_type, contact_info, last_login FROM users"
+      )
+      st.table([
+          {
+              "User": r[0],
+              "Type": r[1],
+              "Contact": r[2],
+              "Last Login": r[3],
+          }
+          for r in c.fetchall()
+      ])
 
   ticker_data = get_market_ticker_price(selected_pair)
   df_klines = get_market_klines(selected_pair, interval=timeframe, limit=120)
 
+  # HEADER BANNER
   st.markdown(
       f"""
   <div class="terminal-header">
       <div>
-          <div class="terminal-title">⚡ {selected_pair} | INSTITUTIONAL TERMINAL</div>
-          <div class="terminal-subtitle">Real-Time Global Market Feed • Timeframe: {timeframe}</div>
+          <div class="terminal-title">⚡ MAAZ KHAN TRADING TERMINAL | {selected_pair}</div>
+          <div class="terminal-subtitle">Real-Time Fast Execution Feed • Timeframe: {timeframe}</div>
       </div>
   </div>
   """,
@@ -779,7 +733,8 @@ else:
   def fmt_p(val):
     return f"${val:,.6f}" if val < 1 else f"${val:,.2f}"
 
-  c1.metric("Mark Price", fmt_p(ticker_data["price"]))
+  cp = ticker_data["price"]
+  c1.metric("Mark Price", fmt_p(cp))
   c2.metric(
       "24h Change",
       f"{ticker_data['change']:.2f}%",
@@ -791,16 +746,39 @@ else:
 
   st.markdown("---")
 
+  # 🚀 FAST SCALP QUICK-CALC HUD
+  st.markdown("### ⚡ **FAST SCALP EXECUTION HUD**")
+  h1, h2, h3, h4 = st.columns(4)
+  h1.markdown(f"**LONG Entry:** `{fmt_p(cp)}`")
+  h2.markdown(f"**Target 1 (+0.5%):** `{fmt_p(cp * 1.005)}`")
+  h3.markdown(f"**Target 2 (+1.0%):** `{fmt_p(cp * 1.01)}`")
+  h4.markdown(f"**Stop Loss (-0.5%):** `{fmt_p(cp * 0.995)}`")
+
+  st.markdown("---")
+
   tab_chart, tab_signals, tab_orderbook, tab_forecast = st.tabs([
-      "📈 Interactive Live Chart",
+      "📈 Live Scalp Chart",
       "⚡ Automated Trading Signals",
       "📊 Volume & ETF Intelligence",
       "🔮 Horizon Matrix",
   ])
 
-  # TAB 1: EMBEDDED TRADINGVIEW CHART (ZERO SERVER LOAD)
+  # TAB 1: DYNAMIC TIMEFRAME TRADINGVIEW CHART (TICKS REAL-TIME LIVE)
   with tab_chart:
-    st.subheader(f"📈 Real-Time Charting Engine: {selected_pair}")
+    st.subheader(
+        f"📈 Real-Time Live Chart ({timeframe} Timeframe): {selected_pair}"
+    )
+
+    # Dynamic Timeframe Mapping for TradingView WebSocket Ticks
+    tv_interval_map = {
+        "1m": "1",
+        "5m": "5",
+        "15m": "15",
+        "1h": "60",
+        "4h": "240",
+        "1d": "D",
+    }
+    tv_interval = tv_interval_map.get(timeframe, "1")
     tv_symbol = f"BYBIT:{selected_pair}"
 
     tradingview_html = f"""
@@ -811,7 +789,7 @@ else:
           new TradingView.widget({{
             "autosize": true,
             "symbol": "{tv_symbol}",
-            "interval": "D",
+            "interval": "{tv_interval}",
             "timezone": "Etc/UTC",
             "theme": "dark",
             "style": "1",
@@ -843,15 +821,15 @@ else:
       rs = gain / loss
       rsi = 100 - (100 / (1 + rs))
 
-      cp = float(close.iloc[-1])
+      curr_p = float(close.iloc[-1]) if cp == 0.0 else cp
       c_rsi = (
           float(rsi.iloc[-1])
           if not rsi.empty and not pd.isna(rsi.iloc[-1])
           else 50.0
       )
-      c_ema50 = float(ema50.iloc[-1]) if not ema50.empty else cp
+      c_ema50 = float(ema50.iloc[-1]) if not ema50.empty else curr_p
 
-      is_bull = cp > c_ema50 and c_rsi > 45
+      is_bull = curr_p > c_ema50 and c_rsi > 45
 
       s1, s2, s3 = st.columns(3)
       with s1:
@@ -861,18 +839,18 @@ else:
             f" {'<span class=\"badge-long\">LONG</span>' if is_bull else '<span class=\"badge-short\">SHORT</span>'}",
             unsafe_allow_html=True,
         )
-        st.write(f"**Entry:** {fmt_p(cp)}")
-        st.write(f"**Stop:** {fmt_p(cp * 0.99)}")
+        st.write(f"**Entry:** {fmt_p(curr_p)}")
+        st.write(f"**Stop:** {fmt_p(curr_p * 0.995)}")
       with s2:
         st.markdown("### 📈 Day Trade Setup")
-        st.write(f"**Target 1:** {fmt_p(cp * 1.02)}")
-        st.write(f"**Target 2:** {fmt_p(cp * 1.05)}")
+        st.write(f"**Target 1:** {fmt_p(curr_p * 1.005)}")
+        st.write(f"**Target 2:** {fmt_p(curr_p * 1.01)}")
       with s3:
         st.markdown("### 💎 Spot Accumulation Zone")
         lb_val = (
             float(lower_band.iloc[-1])
             if not lower_band.empty and not pd.isna(lower_band.iloc[-1])
-            else cp * 0.95
+            else curr_p * 0.95
         )
         st.write(f"**Primary Buy:** {fmt_p(lb_val)}")
     else:
