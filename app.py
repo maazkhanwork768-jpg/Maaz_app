@@ -14,13 +14,12 @@ import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import streamlit as st
-import yfinance as yf
 
 # -----------------------------------------------------------------------------
 # 1. PAGE CONFIG & BINANCE PRO STYLING
 # -----------------------------------------------------------------------------
 st.set_page_config(
-    page_title="Maaz Khan Trading | Binance Pro Terminal",
+    page_title="Maaz Khan Trading | Institutional Terminal",
     page_icon="🟡",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -224,7 +223,6 @@ def send_otp_sms(receiver_phone, otp_code):
     return False, f"SMS delivery error: {str(e)}"
 
 
-# Stable CAPTCHA State
 if "cap_a" not in st.session_state or "cap_b" not in st.session_state:
   st.session_state["cap_a"] = random.randint(1, 9)
   st.session_state["cap_b"] = random.randint(1, 9)
@@ -250,27 +248,19 @@ if "reset_target_user" not in st.session_state:
   st.session_state["reset_target_user"] = ""
 
 # -----------------------------------------------------------------------------
-# 4. ROBUST MULTI-ENDPOINT DATA ENGINE (FAST FALLBACK)
+# 4. MULTI-PROVIDER MARKET DATA ENGINE (BYPASSES CLOUD IP BLOCKS)
 # -----------------------------------------------------------------------------
-@st.cache_data(ttl=15)
+@st.cache_data(ttl=10)
 def get_binance_ticker_price(symbol="BTCUSDT"):
-  endpoints = [
-      f"https://api1.binance.com/api/v3/ticker/24hr?symbol={symbol}",
-      f"https://api2.binance.com/api/v3/ticker/24hr?symbol={symbol}",
-      f"https://api3.binance.com/api/v3/ticker/24hr?symbol={symbol}",
-      f"https://api.binance.com/api/v3/ticker/24hr?symbol={symbol}",
-  ]
-  headers = {
-      "User-Agent": (
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-      )
-  }
+  headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
 
-  for url in endpoints:
-    try:
-      req = urllib.request.Request(url, headers=headers)
-      with urllib.request.urlopen(req, timeout=2) as resp:
-        data = json.loads(resp.read().decode())
+  # Provider 1: Binance.US
+  try:
+    url = f"https://api.binance.us/api/v3/ticker/24hr?symbol={symbol}"
+    req = urllib.request.Request(url, headers=headers)
+    with urllib.request.urlopen(req, timeout=3) as resp:
+      data = json.loads(resp.read().decode())
+      if "lastPrice" in data:
         return {
             "price": float(data["lastPrice"]),
             "change": float(data["priceChangePercent"]),
@@ -279,29 +269,45 @@ def get_binance_ticker_price(symbol="BTCUSDT"):
             "volume": float(data["volume"]),
             "quote_volume": float(data["quoteVolume"]),
         }
-    except Exception:
-      continue
+  except Exception:
+    pass
 
-  # Instant Fallback to yfinance if Binance APIs block Cloud IP
+  # Provider 2: Bybit Global
   try:
-    yf_symbol = symbol.replace("USDT", "-USD")
-    df = yf.download(yf_symbol, period="2d", interval="1d", progress=False)
-    if not df.empty and len(df) >= 1:
-      if isinstance(df.columns, pd.MultiIndex):
-        df.columns = df.columns.get_level_values(0)
-      curr_p = float(df["Close"].iloc[-1])
-      prev_p = float(df["Close"].iloc[-2]) if len(df) > 1 else curr_p
-      chg = (
-          ((curr_p - prev_p) / prev_p) * 100 if prev_p > 0 else 0.0
-      )
-      return {
-          "price": curr_p,
-          "change": chg,
-          "high": float(df["High"].iloc[-1]),
-          "low": float(df["Low"].iloc[-1]),
-          "volume": float(df["Volume"].iloc[-1]),
-          "quote_volume": float(df["Volume"].iloc[-1] * curr_p),
-      }
+    url = f"https://api.bybit.com/v5/market/tickers?category=spot&symbol={symbol}"
+    req = urllib.request.Request(url, headers=headers)
+    with urllib.request.urlopen(req, timeout=3) as resp:
+      data = json.loads(resp.read().decode())
+      if data.get("retCode") == 0 and data.get("result", {}).get("list"):
+        item = data["result"]["list"][0]
+        l_price = float(item["lastPrice"])
+        chg = float(item.get("price24hPcnt", 0)) * 100
+        return {
+            "price": l_price,
+            "change": chg,
+            "high": float(item.get("highPrice24h", l_price)),
+            "low": float(item.get("lowPrice24h", l_price)),
+            "volume": float(item.get("volume24h", 0)),
+            "quote_volume": float(item.get("turnover24h", 0)),
+        }
+  except Exception:
+    pass
+
+  # Provider 3: Binance Global
+  try:
+    url = f"https://api.binance.com/api/v3/ticker/24hr?symbol={symbol}"
+    req = urllib.request.Request(url, headers=headers)
+    with urllib.request.urlopen(req, timeout=3) as resp:
+      data = json.loads(resp.read().decode())
+      if "lastPrice" in data:
+        return {
+            "price": float(data["lastPrice"]),
+            "change": float(data["priceChangePercent"]),
+            "high": float(data["highPrice"]),
+            "low": float(data["lowPrice"]),
+            "volume": float(data["volume"]),
+            "quote_volume": float(data["quoteVolume"]),
+        }
   except Exception:
     pass
 
@@ -317,23 +323,15 @@ def get_binance_ticker_price(symbol="BTCUSDT"):
 
 @st.cache_data(ttl=15)
 def get_binance_klines(symbol="BTCUSDT", interval="1d", limit=120):
-  endpoints = [
-      f"https://api1.binance.com/api/v3/klines?symbol={symbol}&interval={interval}&limit={limit}",
-      f"https://api2.binance.com/api/v3/klines?symbol={symbol}&interval={interval}&limit={limit}",
-      f"https://api3.binance.com/api/v3/klines?symbol={symbol}&interval={interval}&limit={limit}",
-      f"https://api.binance.com/api/v3/klines?symbol={symbol}&interval={interval}&limit={limit}",
-  ]
-  headers = {
-      "User-Agent": (
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-      )
-  }
+  headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
 
-  for url in endpoints:
-    try:
-      req = urllib.request.Request(url, headers=headers)
-      with urllib.request.urlopen(req, timeout=3) as resp:
-        data = json.loads(resp.read().decode())
+  # Provider 1: Binance.US
+  try:
+    url = f"https://api.binance.us/api/v3/klines?symbol={symbol}&interval={interval}&limit={limit}"
+    req = urllib.request.Request(url, headers=headers)
+    with urllib.request.urlopen(req, timeout=3) as resp:
+      data = json.loads(resp.read().decode())
+      if isinstance(data, list) and len(data) > 0:
         df = pd.DataFrame(
             data,
             columns=[
@@ -355,32 +353,69 @@ def get_binance_klines(symbol="BTCUSDT", interval="1d", limit=120):
         for col in ["open", "high", "low", "close", "volume"]:
           df[col] = df[col].astype(float)
         return df
-    except Exception:
-      continue
+  except Exception:
+    pass
 
-  # Fallback to yfinance
+  # Provider 2: Bybit Global
   try:
-    yf_symbol = symbol.replace("USDT", "-USD")
-    yf_interval = "1d" if interval in ["1d", "4h"] else "15m"
-    df = yf.download(
-        yf_symbol, period="60d", interval=yf_interval, progress=False
-    )
-    if not df.empty:
-      if isinstance(df.columns, pd.MultiIndex):
-        df.columns = df.columns.get_level_values(0)
-      df = df.reset_index()
-      date_col = "Date" if "Date" in df.columns else "Datetime"
-      df = df.rename(
-          columns={
-              date_col: "open_time",
-              "Open": "open",
-              "High": "high",
-              "Low": "low",
-              "Close": "close",
-              "Volume": "volume",
-          }
-      )
-      return df
+    bybit_map = {
+        "1m": "1",
+        "5m": "5",
+        "15m": "15",
+        "1h": "60",
+        "4h": "240",
+        "1d": "D",
+    }
+    b_int = bybit_map.get(interval, "D")
+    url = f"https://api.bybit.com/v5/market/kline?category=spot&symbol={symbol}&interval={b_int}&limit={limit}"
+    req = urllib.request.Request(url, headers=headers)
+    with urllib.request.urlopen(req, timeout=3) as resp:
+      data = json.loads(resp.read().decode())
+      if data.get("retCode") == 0 and data.get("result", {}).get("list"):
+        kline_list = data["result"]["list"]
+        kline_list.reverse()
+        rows = []
+        for k in kline_list:
+          rows.append({
+              "open_time": pd.to_datetime(int(k[0]), unit="ms"),
+              "open": float(k[1]),
+              "high": float(k[2]),
+              "low": float(k[3]),
+              "close": float(k[4]),
+              "volume": float(k[5]),
+          })
+        return pd.DataFrame(rows)
+  except Exception:
+    pass
+
+  # Provider 3: Binance Global
+  try:
+    url = f"https://api.binance.com/api/v3/klines?symbol={symbol}&interval={interval}&limit={limit}"
+    req = urllib.request.Request(url, headers=headers)
+    with urllib.request.urlopen(req, timeout=3) as resp:
+      data = json.loads(resp.read().decode())
+      if isinstance(data, list) and len(data) > 0:
+        df = pd.DataFrame(
+            data,
+            columns=[
+                "open_time",
+                "open",
+                "high",
+                "low",
+                "close",
+                "volume",
+                "close_time",
+                "qav",
+                "trades",
+                "tbb",
+                "tbq",
+                "ignore",
+            ],
+        )
+        df["open_time"] = pd.to_datetime(df["open_time"], unit="ms")
+        for col in ["open", "high", "low", "close", "volume"]:
+          df[col] = df[col].astype(float)
+        return df
   except Exception:
     pass
 
@@ -415,7 +450,6 @@ if not st.session_state["logged_in"]:
         "🔑 Reset Password",
     ])
 
-    # 1. LOGIN FORM
     with tab_login:
       with st.form("login_form"):
         st.subheader("Login to Terminal")
@@ -451,7 +485,6 @@ if not st.session_state["logged_in"]:
           else:
             st.error("Invalid username or password.")
 
-    # 2. REGISTRATION FORM
     with tab_reg:
       if st.session_state["reg_step"] == "details":
         st.subheader("Create Account")
@@ -593,7 +626,6 @@ if not st.session_state["logged_in"]:
             st.session_state["reg_step"] = "details"
             st.rerun()
 
-    # 3. FORGOT PASSWORD FORM
     with tab_forgot:
       if st.session_state["reset_step"] == "request":
         st.subheader("Reset Forgotten Password")
@@ -696,7 +728,7 @@ if not st.session_state["logged_in"]:
 
 else:
   # -----------------------------------------------------------------------------
-  # 6. UNLOCKED BINANCE PRO TRADING DASHBOARD
+  # 6. UNLOCKED BINANCE PRO DASHBOARD
   # -----------------------------------------------------------------------------
   st.sidebar.markdown("### 🟡 **BINANCE TERMINAL**")
   st.sidebar.write(f"Logged in as: **{st.session_state['username']}**")
@@ -776,7 +808,7 @@ else:
 
   st.markdown("---")
 
-  if not df_klines.empty and len(df_klines) > 10:
+  if not df_klines.empty and len(df_klines) > 5:
     close = df_klines["close"]
     high = df_klines["high"]
     low = df_klines["low"]
@@ -940,4 +972,5 @@ else:
           })
       )
   else:
-    st.info("Fetching market feeds... Please wait 2–3 seconds.")
+    st.info("Fetching market data... Please wait a few seconds.")
+
